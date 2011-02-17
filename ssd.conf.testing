@@ -1,0 +1,74 @@
+# Copyright 2009, 2010 Brendan Tauras
+
+# ssd.conf.testing is part of FlashSim.
+
+# FlashSim is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+
+# FlashSim is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with FlashSim.  If not, see <http://www.gnu.org/licenses/>.
+
+##############################################################################
+
+# ssd.conf
+# FlashSim configuration file
+# default values in ssd_config.cpp as used if value is not set in config file
+
+
+# Ram class:
+#    delay to read from and write to the RAM for 1 page of data
+RAM_READ_DELAY 1
+RAM_WRITE_DELAY 8
+
+# Bus class:
+#    delay to communicate over bus
+#    max number of connected devices allowed
+#    number of time entries bus has to keep track of future schedule usage
+#    number of simultaneous communication channels - defined by SSD_SIZE
+BUS_CTRL_DELAY 10
+BUS_DATA_DELAY 20
+BUS_MAX_CONNECT 8
+BUS_TABLE_SIZE 64
+
+# Ssd class:
+#    number of Packages per Ssd (size)
+SSD_SIZE 4
+
+# Package class:
+#    number of Dies per Package (size)
+PACKAGE_SIZE 8
+
+# Die class:
+#    number of Planes per Die (size)
+DIE_SIZE 2
+
+# Plane class:
+#    number of Blocks per Plane (size)
+#    delay for reading from plane register
+#    delay for writing to plane register
+#    delay for merging is based on read, write, reg_read, reg_write 
+#       and does not need to be explicitly defined
+PLANE_SIZE 64
+PLANE_REG_READ_DELAY 1
+PLANE_REG_WRITE_DELAY 1
+
+# Block class:
+#    number of Pages per Block (size)
+#    number of erases in lifetime of block
+#    delay for erasing block
+BLOCK_SIZE 16
+BLOCK_ERASES 1048675
+BLOCK_ERASE_DELAY 32
+
+# Page class:
+#    delay for Page reads
+#    delay for Page writes
+PAGE_READ_DELAY 4
+PAGE_WRITE_DELAY 12
