@@ -1,6 +1,6 @@
 /* Copyright 2011 Matias Bjørling */
 
-/* page_ftl.cpp  */
+/* bast_ftl.cpp  */
 
 /* FlashSim is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,8 @@
 
 /****************************************************************************/
 
-/* Implements a very simple page-level FTL without merge */
+/* Implementation of the BAST FTL described in the Paper
+ * "A SPACE-EFFICIENT FLASH TRANSLATION LAYER FOR COMPACTFLASH SYSTEMS by Kim et. al. */
 
 #include <new>
 #include <assert.h>
@@ -143,4 +144,3 @@ enum page_state Ftl::get_state(const Address &address) const
 {
 	return controller.get_state(address);
 }
-
