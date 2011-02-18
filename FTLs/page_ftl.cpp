@@ -23,7 +23,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <math.h>
-#include "ssd.h"
+#include "../ssd.h"
 
 using namespace ssd;
 
@@ -36,7 +36,7 @@ Ftl::Ftl(Controller &controller):
 
 	uint numCells = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
 	map = new long[numCells];
-	for (int i=0;i<numCells;i++)
+	for (uint i=0;i<numCells;i++)
 		map[i] = -1;
 
 	return;
