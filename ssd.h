@@ -193,6 +193,19 @@ public:
 	Address &operator=(const Address &rhs);
 };
 
+/* Class to emulate a log block with page-level mapping. */
+class LogPageBlock
+{
+public:
+	LogPageBlock(void);
+	~LogPageBlock(void);
+	int *pages;
+	uint numValidPages;
+	enum block_state state;
+	long address;
+};
+
+
 /* Class to manage I/O requests as events for the SSD.  It was designed to keep
  * track of an I/O request by storing its type, addressing, and timing.  The
  * SSD class creates an instance for each I/O request it receives. */
@@ -484,16 +497,28 @@ private:
 	void get_least_worn(Address &address) const;
 	enum page_state get_state(const Address &address) const;
 	enum block_state get_block_state(const Address &address) const;
+
 	Controller &controller;
 	Garbage_collector garbage;
 	Wear_leveler wear;
-	Address *free_list;
-	Address *valid_list;
-	Address *invalid_list;
+
+
+	// BAST
+	long *data_list;
+	long *free_list;
+	LogPageBlock *log_list;
+	long *invalid_list;
+
+	int addressShift;
+	int addressSize;
+
+	enum status get_free_block(Address &address);
+
+
 
 	// Simple Page-level mapping.
+	// Used by Page, BAST.
 	ulong currentPage;
-
 	long *map;
 };
 
