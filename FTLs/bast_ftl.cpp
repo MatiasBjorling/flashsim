@@ -42,6 +42,18 @@ LogPageBlock::LogPageBlock():
 	{
 		pages[i] = -1;
 	}
+
+}
+
+void LogPageBlock::Reset()
+{
+	for (uint i=0;i<BLOCK_SIZE;i++)
+	{
+		pages[i] = -1;
+	}
+	state = FREE;
+	address = 0;
+	numValidPages = 0;
 }
 
 LogPageBlock::~LogPageBlock()
@@ -65,8 +77,7 @@ Ftl::Ftl(Controller &controller):
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
 
 	// Trivial assumption checks
-	if (sizeof(uint) != 4)
-		assert("uint is not 4 bytes");
+	if (sizeof(uint) != 4) assert("uint is not 4 bytes");
 
 	// Initialise block mapping table.
 	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
@@ -102,10 +113,10 @@ enum status Ftl::read(Event &event)
 
 	LogPageBlock *logBlock = &log_list[lookupBlock];
 
-	if (map[lookupBlock] == -1 && logBlock->pages[eventAddress.page] == -1)
+	if (data_list[lookupBlock] == -1 && logBlock->pages[eventAddress.page] == -1)
 	{
+		event.set_address(resolve_logical_address(0));
 		fprintf(stderr, "Page not written! Logical Address: %i\n", event.get_logical_address());
-		return FAILURE;
 	}
 
 	// If page is in the log block
@@ -114,9 +125,11 @@ enum status Ftl::read(Event &event)
 		Address returnAddress = resolve_logical_address(logBlock->address);
 		returnAddress.page = logBlock->pages[eventAddress.page];
 		event.set_address(returnAddress);
+	} else {
+		// If page is in the data block
+		Address returnAddress = resolve_logical_address(data_list[lookupBlock]);
+		event.set_address(returnAddress);
 	}
-
-
 
 	controller.issue(event);
 
@@ -156,13 +169,17 @@ enum status Ftl::write(Event &event)
 	}
 
 	// Can it fit inside the exising log block. Issue the request.
-	if (logBlock->numValidPages <= BLOCK_SIZE)
+	if (logBlock->numValidPages < BLOCK_SIZE)
 	{
+		printf("iamyourfather %i\n", logBlock->numValidPages);
 		logBlock->pages[eventAddress.page] = logBlock->numValidPages;
 		Address logBlockAddress = resolve_logical_address(logBlock->address);
 		logBlockAddress.page = logBlock->numValidPages;
 		event.set_address(logBlockAddress);
 		controller.issue(event);
+
+		logBlock->numValidPages++;
+
 		return SUCCESS;
 	}
 
@@ -171,7 +188,8 @@ enum status Ftl::write(Event &event)
 	 * 2. Log block switch
 	 */
 
-	// Is block switch possible?
+	printf("Must do merging\n");
+	// Is block switch possible? i.e. log block switch
 	bool isSequential = true;
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
@@ -184,13 +202,20 @@ enum status Ftl::write(Event &event)
 
 	if (isSequential)
 	{
-		// Add to empty list
-		//data_list[lookupBlock]
+		// Add to empty list i.e. switch without erasing the datablock.
+		if (data_list[lookupBlock] != -1)
+			invalid_list[data_list[lookupBlock]] = 1; // Cleaned at next run.
 
+		data_list[lookupBlock] = logBlock->address;
+		logBlock->Reset();
+		printf("Wrote sequential\n");
+		// TODO: Update mapping with IO.
+		return SUCCESS;
 	}
 
 
-	//fprintf(stderr, "CP: %u LP: %u\n", map[event.get_logical_address()], event.get_logical_address());
+
+
 
 	return FAILURE;
 }
