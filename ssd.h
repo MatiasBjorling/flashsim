@@ -203,6 +203,7 @@ public:
 	uint numValidPages;
 	enum block_state state;
 	long address;
+	void Reset();
 };
 
 
@@ -513,8 +514,6 @@ private:
 	int addressSize;
 
 	enum status get_free_block(Address &address);
-
-
 
 	// Simple Page-level mapping.
 	// Used by Page, BAST.
