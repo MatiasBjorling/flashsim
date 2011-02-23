@@ -106,7 +106,12 @@ extern const double BLOCK_ERASE_DELAY;
  * 	delay for Page writes */
 extern const double PAGE_READ_DELAY;
 extern const double PAGE_WRITE_DELAY;
-
+extern const uint PAGE_SIZE;
+extern bool PAGE_ENABLE_DATA;
+/*
+ * Memory area to support pages with data.
+ */
+extern void *page_data;
 
 /* Enumerations to clarify status integers in simulation
  * Do not use typedefs on enums for reader clarity */
@@ -143,7 +148,6 @@ enum status{FAILURE, SUCCESS};
  * 	the package, die, plane, and block fields are valid
  * 	the page field is not valid */
 enum address_valid{NONE, PACKAGE, DIE, PLANE, BLOCK, PAGE};
-
 
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
@@ -307,6 +311,8 @@ private:
 	Channel * const channels;
 };
 
+
+
 /* The page is the lowest level data storage unit that is the size unit of
  * requests (events).  Pages maintain their state as events modify them. */
 class Page 
@@ -319,12 +325,12 @@ public:
 	const Block &get_parent(void) const;
 	enum page_state get_state(void) const;
 	void set_state(enum page_state state);
+
 private:
 	enum page_state state;
 	const Block &parent;
 	double read_delay;
 	double write_delay;
-/* 	Address next_page; */
 };
 
 /* The block is the data storage hardware unit where erases are implemented.

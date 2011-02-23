@@ -114,6 +114,18 @@ double BLOCK_ERASE_DELAY = 0.001;
 double PAGE_READ_DELAY = 0.000001;
 double PAGE_WRITE_DELAY = 0.00001;
 
+/* Page data memory allocation
+ *
+ */
+uint PAGE_SIZE = 4096;
+bool PAGE_ENABLE_DATA = true;
+
+/*
+ * Memory area to support pages with data.
+ */
+void *page_data;
+
+
 void load_entry(char *name, double value, uint line_number)
 {
 	/* cheap implementation - go through all possibilities and match entry */
@@ -151,6 +163,15 @@ void load_entry(char *name, double value, uint line_number)
 		PAGE_READ_DELAY = value;
 	else if(!strcmp(name, "PAGE_WRITE_DELAY"))
 		PAGE_WRITE_DELAY = value;
+	else if(!strcmp(name, "PAGE_SIZE"))
+		PAGE_SIZE = value;
+	else if(!strcmp(name, "PAGE_ENABLE_DATA"))
+		{
+			if (value == 1)
+				PAGE_ENABLE_DATA = true;
+			else
+				PAGE_ENABLE_DATA = false;
+		}
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;
@@ -217,6 +238,8 @@ void print_config(FILE *stream)
 	fprintf(stream, "BLOCK_ERASE_DELAY: %.16lf\n", BLOCK_ERASE_DELAY);
 	fprintf(stream, "PAGE_READ_DELAY: %.16lf\n", PAGE_READ_DELAY);
 	fprintf(stream, "PAGE_WRITE_DELAY: %.16lf\n", PAGE_WRITE_DELAY);
+	fprintf(stream, "PAGE_SIZE: %u\n", PAGE_SIZE);
+	fprintf(stream, "PAGE_ENABLE_DATA: %i\n", PAGE_ENABLE_DATA);
 	return;
 }
 

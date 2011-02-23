@@ -29,6 +29,10 @@
 #include <assert.h>
 #include <stdio.h>
 #include "ssd.h"
+#include <sys/mman.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 using namespace ssd;
 
@@ -74,19 +78,39 @@ Ssd::Ssd(uint ssd_size):
 		(void) new (&data[i]) Package(*this, bus.get_channel(i), PACKAGE_SIZE);
 	}
 	
+	// Check for 32bit machine. We do not allow page data on 32bit machines.
+	if (sizeof(void*) == 4)
+	{
+		fprintf(stderr, "Ssd error: %s: The simulator requires a 64bit kernel when using data pages. Disabling data pages.\n", __func__);
+		PAGE_ENABLE_DATA = false;
+	}
+
+	if (PAGE_ENABLE_DATA)
+	{
+		/* Allocate memory for data pages */
+		ulong pageSize = ((ulong)(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE)) * (ulong)PAGE_SIZE;
+		page_data = mmap64(NULL, pageSize, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS, NULL ,0);
+
+		if (page_data == MAP_FAILED)
+		{
+			fprintf(stderr, "Ssd error: %s: constructor unable to allocate page data. Disabling data pages.\n", __func__);
+			PAGE_ENABLE_DATA = false;
+		}
+	}
+
 	return;
 }
 
 Ssd::~Ssd(void)
 {
-	uint i;
 	/* explicitly call destructors and use free
 	 * since we used malloc and placement new */
-	for (i = 0; i < size; i++)
+	for (uint i = 0; i < size; i++)
 	{
 		data[i].~Package();
 	}
 	free(data);
+	free(page_data);
 	return;
 }
 
