@@ -79,10 +79,10 @@ Ssd::Ssd(uint ssd_size):
 	}
 	
 	// Check for 32bit machine. We do not allow page data on 32bit machines.
-	if (sizeof(void*) == 4)
+	if (PAGE_ENABLE_DATA == 1 && sizeof(void*) == 4)
 	{
 		fprintf(stderr, "Ssd error: %s: The simulator requires a 64bit kernel when using data pages. Disabling data pages.\n", __func__);
-		PAGE_ENABLE_DATA = false;
+		exit(MEM_ERR);
 	}
 
 	if (PAGE_ENABLE_DATA)
@@ -94,7 +94,7 @@ Ssd::Ssd(uint ssd_size):
 		if (page_data == MAP_FAILED)
 		{
 			fprintf(stderr, "Ssd error: %s: constructor unable to allocate page data. Disabling data pages.\n", __func__);
-			PAGE_ENABLE_DATA = false;
+			exit(MEM_ERR);
 		}
 	}
 
