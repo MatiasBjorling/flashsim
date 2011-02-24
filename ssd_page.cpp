@@ -25,7 +25,17 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
+
 #include "ssd.h"
+
+namespace ssd {
+	/*
+	 * Buffer used for accessing data pages.
+	 */
+	void *global_buffer;
+
+}
 
 using namespace ssd;
 
@@ -41,8 +51,6 @@ Page::Page(const Block &parent, double read_delay, double write_delay):
 		fprintf(stderr, "Page warning: %s: constructor received negative read delay value\n\tsetting read delay to 0.0\n", __func__);
 		this -> read_delay = 0.0;
 	}
-	if (write_delay < 200.0)
-		fprintf(stderr, "Woot?\n");
 
 	if(write_delay < 0.0){
 		fprintf(stderr, "Page warning: %s: constructor received negative write delay value\n\tsetting write delay to 0.0\n", __func__);
@@ -61,6 +69,8 @@ enum status Page::_read(Event &event)
 	assert(read_delay >= 0.0);
 	if(state == VALID){
 		event.incr_time_taken(read_delay);
+		if (PAGE_ENABLE_DATA)
+			global_buffer = (char*)page_data + event.get_address().get_linear_address();
 		return SUCCESS;
 	} else
 		return FAILURE;
@@ -72,6 +82,11 @@ enum status Page::_write(Event &event)
 	if(state == EMPTY){
 		event.incr_time_taken(write_delay);
 		state = VALID;
+		if (PAGE_ENABLE_DATA && event.get_payload() != NULL)
+		{
+			void *data = (char*)page_data + event.get_address().get_linear_address();
+			memcpy (data, event.get_payload(), PAGE_SIZE);
+		}
 		return SUCCESS;
 	} else
 		return FAILURE;
@@ -92,3 +107,4 @@ void Page::set_state(enum page_state state)
 	this -> state = state;
 	return;
 }
+

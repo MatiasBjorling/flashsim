@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 
 using namespace ssd;
 
@@ -89,11 +90,17 @@ Ssd::Ssd(uint ssd_size):
 	{
 		/* Allocate memory for data pages */
 		ulong pageSize = ((ulong)(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE)) * (ulong)PAGE_SIZE;
-		page_data = mmap64(NULL, pageSize, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS, NULL ,0);
+		page_data = mmap64(NULL, pageSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1 ,0);
 
 		if (page_data == MAP_FAILED)
 		{
-			fprintf(stderr, "Ssd error: %s: constructor unable to allocate page data. Disabling data pages.\n", __func__);
+			fprintf(stderr, "Ssd error: %s: constructor unable to allocate page data.\n", __func__);
+			switch (errno)
+			{
+			case EACCES:
+				break;
+			}
+			printf("%i\n",errno);
 			exit(MEM_ERR);
 		}
 	}
@@ -110,7 +117,8 @@ Ssd::~Ssd(void)
 		data[i].~Package();
 	}
 	free(data);
-	free(page_data);
+	ulong pageSize = ((ulong)(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE)) * (ulong)PAGE_SIZE;
+	munmap(page_data, pageSize);
 	return;
 }
 

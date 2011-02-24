@@ -128,6 +128,16 @@ Event *Event::get_next(void) const
 	return next;
 }
 
+void Event::set_payload(void *payload)
+{
+	this->payload = payload;
+}
+
+void *Event::get_payload(void) const
+{
+	return payload;
+}
+
 void Event::set_address(const Address &address)
 {
 	this -> address = address;

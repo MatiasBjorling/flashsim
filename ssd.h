@@ -112,6 +112,7 @@ extern const bool PAGE_ENABLE_DATA;
  * Memory area to support pages with data.
  */
 extern void *page_data;
+extern void *global_buffer;
 
 /* Enumerations to clarify status integers in simulation
  * Do not use typedefs on enums for reader clarity */
@@ -195,6 +196,7 @@ public:
 	enum address_valid compare(const Address &address) const;
 	void print(FILE *stream = stdout);
 	Address &operator=(const Address &rhs);
+	unsigned long int get_linear_address() const;
 };
 
 /* Class to emulate a log block with page-level mapping. */
@@ -232,6 +234,8 @@ public:
 	void set_address(const Address &address);
 	void set_merge_address(const Address &address);
 	void set_next(Event &next);
+	void set_payload(void *payload);
+	void *get_payload(void) const;
 	double incr_bus_wait_time(double time);
 	double incr_time_taken(double time_incr);
 	void print(FILE *stream = stdout);
@@ -244,6 +248,7 @@ private:
 	Address address;
 	Address merge_address;
 	uint size;
+	void *payload;
 	Event *next;
 };
 
@@ -325,7 +330,6 @@ public:
 	const Block &get_parent(void) const;
 	enum page_state get_state(void) const;
 	void set_state(enum page_state state);
-
 private:
 	enum page_state state;
 	const Block &parent;

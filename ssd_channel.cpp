@@ -140,7 +140,12 @@ enum status Channel::disconnect(void)
 enum status Channel::lock(double start_time, double duration, Event &event)
 {
 /* TODO: Recombine assert statements */
-	assert(lock_time != NULL && unlock_time != NULL);assert(num_connected <= max_connections);assert(ctrl_delay >= 0.0);assert(data_delay >= 0.0);assert(start_time >= 0.0);assert(duration >= 0.0);
+	assert(lock_time != NULL && unlock_time != NULL);
+	assert(num_connected <= max_connections);
+	assert(ctrl_delay >= 0.0);
+	assert(data_delay >= 0.0);
+	assert(start_time >= 0.0);
+	assert(duration >= 0.0);
 
 	#ifndef NDEBUG
 		uint j;
@@ -216,6 +221,7 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 	/* update event times for bus wait and time taken */
 	event.incr_bus_wait_time(sched_time - start_time);
 	event.incr_time_taken(sched_time - start_time + duration);
+	printf("increases bus wait time by %f and time taken %f\n", (sched_time - start_time), (sched_time - start_time + duration));
 
 	return SUCCESS;
 }

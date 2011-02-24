@@ -139,6 +139,11 @@ void Address::print(FILE *stream)
 	return;
 }
 
+unsigned long int Address::get_linear_address() const
+{
+	return (ulong)(package * die * plane * block) * (ulong)page;;
+}
+
 Address &Address::operator=(const Address &rhs)
 {
 	if(this == &rhs)
