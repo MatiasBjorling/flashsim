@@ -15,14 +15,15 @@
 using namespace ssd;
 
 Ssd *ssdImpl;
+struct timeval ssd_boot_time, ssd_request_time;
 
 extern "C" {
 #endif
 
-void SSDInitialize();
-void SSDCleanup();
-void SSDWrite(unsigned long long address, int size);
-void SSDRead(unsigned long long address, int size);
+void SSD_Initialize();
+void SSD_Cleanup();
+void SSD_Write(unsigned long long address, int size);
+void SSD_Read(unsigned long long address, int size);
 
 #ifdef __cplusplus
 } // extern "C"
