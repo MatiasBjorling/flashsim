@@ -67,10 +67,13 @@ Page::~Page(void)
 enum status Page::_read(Event &event)
 {
 	assert(read_delay >= 0.0);
-	if(state == VALID){
+	if(state == VALID || state == EMPTY){
 		event.incr_time_taken(read_delay);
 		if (PAGE_ENABLE_DATA)
 			global_buffer = (char*)page_data + event.get_address().get_linear_address();
+
+		if (state == EMPTY)
+			fprintf(stderr, "Reading from empty page.\n");
 		return SUCCESS;
 	} else
 		return FAILURE;

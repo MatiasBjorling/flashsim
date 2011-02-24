@@ -34,6 +34,7 @@
 #include <new>
 #include <assert.h>
 #include <stdio.h>
+#include <algorithm>
 #include "ssd.h"
 
 using namespace ssd;
@@ -221,7 +222,6 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 	/* update event times for bus wait and time taken */
 	event.incr_bus_wait_time(sched_time - start_time);
 	event.incr_time_taken(sched_time - start_time + duration);
-	printf("increases bus wait time by %f and time taken %f\n", (sched_time - start_time), (sched_time - start_time + duration));
 
 	return SUCCESS;
 }
@@ -246,8 +246,8 @@ void Channel::unlock(double start_time)
 		}
 	}
 
-	/* sort both arrays together - e.g. sort by first array but perform same
-	 * move operation on both arrays */
-	quicksort(lock_time, unlock_time, 0, table_size - 1);
+	std::sort(lock_time, lock_time + table_size -1);
+	std::sort(unlock_time, unlock_time + table_size -1);
+
 	return;
 }

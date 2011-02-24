@@ -128,7 +128,7 @@ Ssd::~Ssd(void)
  * 	time (arrive time) of the request
  * The SSD will process the request and return the time taken to process the
  * 	request.  Remember to use the same time units as in the config file. */
-double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size, double start_time)
+double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size, double start_time, void *buffer)
 {
 	assert(start_time >= 0.0);
 	assert((long long int) logical_address <= (long long int) SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE);

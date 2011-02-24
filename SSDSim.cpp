@@ -41,7 +41,7 @@ void SSD_Write(unsigned long long address, int size)
 
 	for (int i=0;i<size;i += 4096)
 	{
-		double result = ssdImpl->event_arrive(WRITE, address, 1, time);
+		double result = ssdImpl->event_arrive(WRITE, address, 1, time, NULL);
 		printf("Write time address %llu (%i): %.20lf at %.3f\n", address, size, result, time);
 	}
 }
@@ -54,7 +54,7 @@ void SSD_Read(unsigned long long address, int size)
 
 	for (int i=0;i<size;i += 4096)
 	{
-		double result = ssdImpl->event_arrive(READ, address, 1, time);
+		double result = ssdImpl->event_arrive(READ, address, 1, time, NULL);
 		printf("Read time %llu (%i): %.20lf at %.3f\n", address, size, result, time);
 	}
 }

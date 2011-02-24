@@ -18,7 +18,7 @@
 /****************************************************************************/
 
 /* Implementation of the BAST FTL described in the Paper
- * "A SPACE-EFFICIENT FLASH TRANSLATION LAYER FOR COMPACTFLASH SYSTEMS by Kim et. al.
+ * "A SPACE-EFFICIENT FLASH TRANSLATION LAYER FOR COMPACTFLASH SYSTEMS by Kim et. al."
  *
  * Notice: Startup procedures are not implemented as the drive is empty every time
  * the simulator is executed. i.e. OOB's is not filled with logical page address
@@ -42,7 +42,6 @@ LogPageBlock::LogPageBlock():
 	{
 		pages[i] = -1;
 	}
-
 }
 
 void LogPageBlock::Reset()
@@ -67,6 +66,8 @@ Ftl::Ftl(Controller &controller):
 	wear(*this)
 {
 	currentPage = 0;
+	addressShift = 0;
+	addressSize = 0;
 
 	// Detect required number of bits for logical address size
 	for (int size = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * 4; size > 0; addressSize++) size /= 2;
@@ -77,7 +78,7 @@ Ftl::Ftl(Controller &controller):
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
 
 	// Trivial assumption checks
-	if (sizeof(uint) != 4) assert("uint is not 4 bytes");
+	if (sizeof(int) != 4) assert("integer is not 4 bytes");
 
 	// Initialise block mapping table.
 	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
@@ -86,7 +87,7 @@ Ftl::Ftl(Controller &controller):
 	log_list = new LogPageBlock[numBlocks];
 	invalid_list = new long[numBlocks];
 
-	for (int i=0;i<numBlocks;i++)
+	for (uint i=0;i<numBlocks;i++)
 	{
 		data_list[i] = -1;
 		free_list[i] = -1;
@@ -116,23 +117,22 @@ enum status Ftl::read(Event &event)
 	if (data_list[lookupBlock] == -1 && logBlock->pages[eventAddress.page] == -1)
 	{
 		event.set_address(resolve_logical_address(0));
-		fprintf(stderr, "Page not written! Logical Address: %i\n", event.get_logical_address());
-	}
-
-	// If page is in the log block
-	if (logBlock->pages[eventAddress.page] != -1)
-	{
-		Address returnAddress = resolve_logical_address(logBlock->address);
-		returnAddress.page = logBlock->pages[eventAddress.page];
-		event.set_address(returnAddress);
+		fprintf(stderr, "Page read not written. Logical Address: %i\n", event.get_logical_address());
 	} else {
-		// If page is in the data block
-		Address returnAddress = resolve_logical_address(data_list[lookupBlock]);
-		event.set_address(returnAddress);
+		// If page is in the log block
+		if (logBlock->pages[eventAddress.page] != -1)
+		{
+			Address returnAddress = resolve_logical_address(logBlock->address);
+			returnAddress.page = logBlock->pages[eventAddress.page];
+			event.set_address(returnAddress);
+			controller.issue(event);
+		} else {
+			// If page is in the data block
+			Address returnAddress = resolve_logical_address(data_list[lookupBlock]);
+			event.set_address(returnAddress);
+			controller.issue(event);
+		}
 	}
-
-	controller.issue(event);
-
 
 	return SUCCESS;
 }
@@ -145,8 +145,16 @@ enum status Ftl::write(Event &event)
 
 	LogPageBlock *logBlock = &log_list[lookupBlock];
 
-	if (logBlock->state == INVALID)
+
+	if (logBlock->state == INACTIVE)
 		return FAILURE;
+
+//	char *data = new char[PAGE_SIZE];
+//	for (uint i=0;i<PAGE_SIZE;i++)
+//	{
+//		data[i] = '1';
+//	}
+//	event.set_payload(data);
 
 	// Get a new block and promote it as the block for the request.
 	if (logBlock->state == FREE)
@@ -164,21 +172,27 @@ enum status Ftl::write(Event &event)
 		logBlock->numValidPages++;
 
 		event.set_address(newLogBlock);
-		controller.issue(event);
-		return SUCCESS;
+
+		return controller.issue(event);;
 	}
 
-	// Can it fit inside the exising log block. Issue the request.
+	// Can it fit inside the existing log block. Issue the request.
 	if (logBlock->numValidPages < BLOCK_SIZE)
 	{
-		printf("iamyourfather %i\n", logBlock->numValidPages);
 		logBlock->pages[eventAddress.page] = logBlock->numValidPages;
 		Address logBlockAddress = resolve_logical_address(logBlock->address);
 		logBlockAddress.page = logBlock->numValidPages;
 		event.set_address(logBlockAddress);
-		controller.issue(event);
+		if (controller.issue(event) == FAILURE)
+			return FAILURE;
 
 		logBlock->numValidPages++;
+
+		if (logBlockAddress.die % 64 == 0 && logBlockAddress.block == 1)
+		{
+			logBlockAddress.print(stderr);
+			fprintf(stderr, "\n");
+		}
 
 		return SUCCESS;
 	}
@@ -214,27 +228,95 @@ enum status Ftl::write(Event &event)
 	}
 
 
+	/* 1. Write page to new data block
+	 * 1a Promote new log block.
+	 * 2. Create BLOCK_SIZE reads
+	 * 3. Create BLOCK_SIZE writes
+	 * 4. Invalidate data block
+	 * 5. promote new block as data block
+	 * 6. put data and log block into the invalidate list.
+	 */
 
 
+	Address newLogBlock;
+	if (get_free_block(newLogBlock) == FAILURE)
+		return FAILURE;
 
-	return FAILURE;
+	event.set_address(newLogBlock);
+
+	// Invalidate log and data block
+	invalid_list[logBlock->address] = 1;
+	if (data_list[lookupBlock] != -1)
+		invalid_list[data_list[lookupBlock]] = 1;
+
+	// Create new log block
+	logBlock->Reset();
+	logBlock->state = ACTIVE;
+	logBlock->pages[eventAddress.page] = logBlock->numValidPages;
+	logBlock->address = newLogBlock.get_linear_address();
+	newLogBlock.page = logBlock->numValidPages;
+	logBlock->numValidPages++;
+
+	// Simulate merge (n reads, n writes and 2 erases (gc'ed))
+	Address newDataBlock;
+	if (get_free_block(newDataBlock) == FAILURE)
+		return FAILURE;
+
+	data_list[lookupBlock] = newDataBlock.get_linear_address();
+
+	Event *eventOps = &event;
+	for (uint i=0;i<BLOCK_SIZE;i++)
+	{
+		Event *newEvent = NULL;
+		if((newEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time())) == NULL)
+		{
+			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);
+			exit(MEM_ERR);
+		}
+
+		newEvent->set_address(resolve_logical_address(logBlock->address+i));
+		eventOps->set_next(*newEvent);
+		eventOps = newEvent;
+
+		if((newEvent = new Event(WRITE, event.get_logical_address(), 1, event.get_start_time())) == NULL)
+		{
+			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);
+			exit(MEM_ERR);
+		}
+
+		Address a = resolve_logical_address(newDataBlock.get_linear_address() + i);
+		newEvent->set_address(a);
+
+		eventOps->set_next(*newEvent);
+		eventOps = newEvent;
+	}
+
+	if (controller.issue(event) == FAILURE)
+		return FAILURE;
+
+	event.consolidate_metaevent(event);
+
+	return SUCCESS;
 }
 
-inline Address Ftl::resolve_logical_address(uint logicalAddress)
+inline Address Ftl::resolve_logical_address(uint logical_address)
 {
-	uint numCells = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
+	assert(logical_address >= 0);
 
-	Address phyAddress;
-	phyAddress.package = floor(logicalAddress / (numCells / SSD_SIZE));
-	phyAddress.die = floor(logicalAddress / (numCells / SSD_SIZE / PACKAGE_SIZE));
-	phyAddress.plane = floor(logicalAddress / (numCells / SSD_SIZE / PACKAGE_SIZE / DIE_SIZE));
-	phyAddress.block = floor(logicalAddress / (numCells / SSD_SIZE / PACKAGE_SIZE / DIE_SIZE / PLANE_SIZE));
-	phyAddress.page = logicalAddress % BLOCK_SIZE;
-	phyAddress.valid = PAGE;
+	Address address;
+	address.page = logical_address % BLOCK_SIZE;
+	logical_address /= BLOCK_SIZE;
+	address.block = logical_address % PLANE_SIZE;
+	logical_address /= PLANE_SIZE;
+	address.plane = logical_address % DIE_SIZE;
+	logical_address /= DIE_SIZE;
+	address.die = logical_address % PACKAGE_SIZE;
+	logical_address /= PACKAGE_SIZE;
+	address.package = logical_address % SSD_SIZE;
+	logical_address /= SSD_SIZE;
+	address.valid = PAGE;
 
-	//fprintf(stderr, "numCells: %i package: %i die: %i plane: %i block: %i page: %i\n", numCells, phyAddress.package, phyAddress.die, phyAddress.plane, phyAddress.block, phyAddress.page);
-
-	return phyAddress;
+	return address;
 }
 
 enum status Ftl::erase(Event &event)

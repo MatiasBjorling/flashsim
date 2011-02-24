@@ -252,18 +252,6 @@ private:
 	Event *next;
 };
 
-/* Quicksort for Channel class
- * Supply base pointer to array to be sorted along with inclusive range of
- * indices to sort.  The move operations for sorting the first array will also
- * be performed on the second array, or the second array can be NULL.  The
- * second array is useful for the channel scheduling table where we want to
- * sort by one row and keep data pairs in columns together. */
-/* extern "C" void quicksort(double *array1, double *array2, long left, long right); */
-void quicksort(double *array1, double *array2, long left, long right);
-/* internal quicksort functions listed for documentation purposes
- * long partition(double *array1, double *array2, long left, long right);
- * void swap(double *x, double *y); */
-
 /* Single bus channel
  * Simulate multiple devices on 1 bus channel with variable bus transmission
  * durations for data and control delays with the Channel class.  Provide the 
@@ -583,7 +571,7 @@ class Ssd
 public:
 	Ssd (uint ssd_size = SSD_SIZE);
 	~Ssd(void);
-	double event_arrive(enum event_type type, ulong logical_address, uint size, double start_time);
+	double event_arrive(enum event_type type, ulong logical_address, uint size, double start_time, void *buffer);
 	friend class Controller;
 private:
 	enum status read(Event &event);
