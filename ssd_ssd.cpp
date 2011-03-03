@@ -122,6 +122,11 @@ Ssd::~Ssd(void)
 	return;
 }
 
+double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size, double start_time)
+{
+	return event_arrive(type, logical_address, size, start_time, NULL);
+}
+
 /* This is the function that will be called by DiskSim
  * Provide the event (request) type (see enum in ssd.h),
  * 	logical_address (page number), size of request in pages, and the start
@@ -148,6 +153,7 @@ double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size,
 		exit(MEM_ERR);
 	}
 
+	event->set_payload(buffer);
 
 	/* REAL SSD ONLY */
 	if(controller.event_arrive(*event) != SUCCESS)
@@ -212,6 +218,16 @@ double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size,
 	start_time = event -> get_time_taken();
 	delete event;
 	return start_time;
+}
+
+/*
+ * Returns a pointer to the global buffer of the Ssd.
+ * It is up to the user to not read out of bound and only
+ * read the intended size. i.e. the page size.
+ */
+void *Ssd::get_result_buffer()
+{
+	return global_buffer;
 }
 
 /* read write erase and merge should only pass on the event

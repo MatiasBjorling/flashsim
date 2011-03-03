@@ -66,6 +66,12 @@ Address::Address(uint package, uint die, uint plane, uint block, uint page, enum
 	return;
 }
 
+Address::Address(uint address, enum address_valid valid):
+	valid(valid)
+{
+	set_linear_address(address);
+}
+
 Address::~Address()
 {
 	return;
@@ -139,9 +145,30 @@ void Address::print(FILE *stream)
 	return;
 }
 
-unsigned long int Address::get_linear_address() const
+void Address::set_linear_address(uint address)
 {
-	return (ulong)(package * die * plane * block) * (ulong)page;;
+	real_address = address;
+	page = address % BLOCK_SIZE;
+	address /= BLOCK_SIZE;
+	block = address % PLANE_SIZE;
+	address /= PLANE_SIZE;
+	plane = address % DIE_SIZE;
+	address /= DIE_SIZE;
+	die = address % PACKAGE_SIZE;
+	address /= PACKAGE_SIZE;
+	package = address % SSD_SIZE;
+	address /= SSD_SIZE;
+}
+
+void Address::set_linear_address(uint address, enum address_valid valid)
+{
+	set_linear_address(address);
+	this->valid = valid;
+}
+
+unsigned int Address::get_linear_address() const
+{
+	return real_address;
 }
 
 Address &Address::operator=(const Address &rhs)
@@ -154,5 +181,6 @@ Address &Address::operator=(const Address &rhs)
 	block = rhs.block;
 	page = rhs.page;
 	valid = rhs.valid;
+	real_address = rhs.real_address;
 	return *this;
 }

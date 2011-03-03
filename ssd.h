@@ -186,17 +186,21 @@ public:
 	uint plane;
 	uint block;
 	uint page;
+	uint real_address;
 	enum address_valid valid;
 	Address(void);
 	Address(const Address &address);
 	Address(const Address *address);
 	Address(uint package, uint die, uint plane, uint block, uint page, enum address_valid valid);
+	Address(uint address, enum address_valid valid);
 	~Address();
 	enum address_valid check_valid(uint ssd_size = SSD_SIZE, uint package_size = PACKAGE_SIZE, uint die_size = DIE_SIZE, uint plane_size = PLANE_SIZE, uint block_size = BLOCK_SIZE);
 	enum address_valid compare(const Address &address) const;
 	void print(FILE *stream = stdout);
 	Address &operator=(const Address &rhs);
-	unsigned long int get_linear_address() const;
+	void set_linear_address(uint address, enum address_valid valid);
+	void set_linear_address(uint address);
+	unsigned int get_linear_address() const;
 };
 
 /* Class to emulate a log block with page-level mapping. */
@@ -488,7 +492,7 @@ public:
 	enum status read(Event &event);
 	enum status write(Event &event);
 private:
-	Address resolve_logical_address(uint logicalAddress);
+	Address resolve_logical_address(unsigned int logicalAddress);
 	enum status erase(Event &event);
 	enum status merge(Event &event);
 	void garbage_collect(Event &event);
@@ -507,6 +511,7 @@ private:
 	long *free_list;
 	LogPageBlock *log_list;
 	long *invalid_list;
+	enum status set_new_logblock(LogPageBlock *logBlock);
 
 	int addressShift;
 	int addressSize;
@@ -571,7 +576,9 @@ class Ssd
 public:
 	Ssd (uint ssd_size = SSD_SIZE);
 	~Ssd(void);
+	double event_arrive(enum event_type type, ulong logical_address, uint size, double start_time);
 	double event_arrive(enum event_type type, ulong logical_address, uint size, double start_time, void *buffer);
+	void *get_result_buffer();
 	friend class Controller;
 private:
 	enum status read(Event &event);

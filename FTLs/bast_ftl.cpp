@@ -51,7 +51,7 @@ void LogPageBlock::Reset()
 		pages[i] = -1;
 	}
 	state = FREE;
-	address = 0;
+	address = -1;
 	numValidPages = 0;
 }
 
@@ -110,29 +110,48 @@ enum status Ftl::read(Event &event)
 {
 	// Find block
 	uint lookupBlock = (event.get_logical_address() >> addressShift);
-	Address eventAddress = resolve_logical_address(event.get_logical_address());
+	Address eventAddress;
+	eventAddress.set_linear_address(event.get_logical_address());
 
 	LogPageBlock *logBlock = &log_list[lookupBlock];
 
 	if (data_list[lookupBlock] == -1 && logBlock->pages[eventAddress.page] == -1)
 	{
-		event.set_address(resolve_logical_address(0));
-		fprintf(stderr, "Page read not written. Logical Address: %i\n", event.get_logical_address());
-	} else {
-		// If page is in the log block
-		if (logBlock->pages[eventAddress.page] != -1)
-		{
-			Address returnAddress = resolve_logical_address(logBlock->address);
-			returnAddress.page = logBlock->pages[eventAddress.page];
-			event.set_address(returnAddress);
-			controller.issue(event);
-		} else {
-			// If page is in the data block
-			Address returnAddress = resolve_logical_address(data_list[lookupBlock]);
-			event.set_address(returnAddress);
-			controller.issue(event);
-		}
+		event.set_address(new Address(0, PAGE));
+		fprintf(stderr, "Page read not written. Logical Address: %li\n", event.get_logical_address());
+		return FAILURE;
 	}
+
+
+	// If page is in the log block
+	if (logBlock->pages[eventAddress.page] != -1)
+	{
+		Address returnAddress = new Address(logBlock->address+logBlock->pages[eventAddress.page], PAGE);
+		event.set_address(returnAddress);
+		controller.issue(event);
+	} else {
+		// If page is in the data block
+		Address returnAddress = new Address(data_list[lookupBlock], PAGE);
+		event.set_address(returnAddress);
+		controller.issue(event);
+	}
+
+
+	return SUCCESS;
+}
+
+enum status Ftl::set_new_logblock(LogPageBlock *logBlock)
+{
+	// Get a new block and promote it as the block for the request.
+	Address newLogBlock;
+	if (get_free_block(newLogBlock) == FAILURE)
+		return FAILURE;
+
+	// Maintain page-level block structure.
+	logBlock->state = ACTIVE;
+	logBlock->address = newLogBlock.get_linear_address();
+
+	printf("Using new log block with address: %i\n", logBlock->address);
 
 	return SUCCESS;
 }
@@ -141,7 +160,8 @@ enum status Ftl::write(Event &event)
 {
 	uint lookupBlock = (event.get_logical_address() >> addressShift);
 
-	Address eventAddress = resolve_logical_address(event.get_logical_address());
+	Address eventAddress;
+	eventAddress.set_linear_address(event.get_logical_address());
 
 	LogPageBlock *logBlock = &log_list[lookupBlock];
 
@@ -149,29 +169,15 @@ enum status Ftl::write(Event &event)
 	if (logBlock->state == INACTIVE)
 		return FAILURE;
 
-//	char *data = new char[PAGE_SIZE];
-//	for (uint i=0;i<PAGE_SIZE;i++)
-//	{
-//		data[i] = '1';
-//	}
-//	event.set_payload(data);
-
-	// Get a new block and promote it as the block for the request.
 	if (logBlock->state == FREE)
 	{
-		Address newLogBlock;
-		if (get_free_block(newLogBlock) == FAILURE)
-			return FAILURE;
+		set_new_logblock(logBlock);
 
-		// Maintain page-level block structure.
-		logBlock->state = ACTIVE;
-		logBlock->pages[eventAddress.page] = logBlock->numValidPages;
-		logBlock->address = currentPage;
-		newLogBlock.page = logBlock->numValidPages;
-
+		logBlock->pages[eventAddress.page] = 0;
 		logBlock->numValidPages++;
 
-		event.set_address(newLogBlock);
+		Address logBlockAddress = new Address(logBlock->address, PAGE);
+		event.set_address(logBlockAddress);
 
 		return controller.issue(event);;
 	}
@@ -179,20 +185,16 @@ enum status Ftl::write(Event &event)
 	// Can it fit inside the existing log block. Issue the request.
 	if (logBlock->numValidPages < BLOCK_SIZE)
 	{
+
 		logBlock->pages[eventAddress.page] = logBlock->numValidPages;
-		Address logBlockAddress = resolve_logical_address(logBlock->address);
-		logBlockAddress.page = logBlock->numValidPages;
+
+		Address logBlockAddress = new Address(logBlock->address + logBlock->numValidPages, PAGE);
+
 		event.set_address(logBlockAddress);
 		if (controller.issue(event) == FAILURE)
 			return FAILURE;
 
 		logBlock->numValidPages++;
-
-		if (logBlockAddress.die % 64 == 0 && logBlockAddress.block == 1)
-		{
-			logBlockAddress.print(stderr);
-			fprintf(stderr, "\n");
-		}
 
 		return SUCCESS;
 	}
@@ -202,7 +204,6 @@ enum status Ftl::write(Event &event)
 	 * 2. Log block switch
 	 */
 
-	printf("Must do merging\n");
 	// Is block switch possible? i.e. log block switch
 	bool isSequential = true;
 	for (uint i=0;i<BLOCK_SIZE;i++)
@@ -221,10 +222,22 @@ enum status Ftl::write(Event &event)
 			invalid_list[data_list[lookupBlock]] = 1; // Cleaned at next run.
 
 		data_list[lookupBlock] = logBlock->address;
+
+		// Clear the log block for incoming I/Os to the same block.
 		logBlock->Reset();
+
+		set_new_logblock(logBlock);
+
+		logBlock->pages[eventAddress.page] = 0;
+		logBlock->numValidPages++;
+
+		Address logBlockAddress = new Address(logBlock->address, PAGE);
+
+		event.set_address(logBlockAddress);
+
 		printf("Wrote sequential\n");
 		// TODO: Update mapping with IO.
-		return SUCCESS;
+		return controller.issue(event);
 	}
 
 
@@ -274,7 +287,8 @@ enum status Ftl::write(Event &event)
 			exit(MEM_ERR);
 		}
 
-		newEvent->set_address(resolve_logical_address(logBlock->address+i));
+		Address logBlockAddress = new Address(logBlock->address+i, PAGE);
+		newEvent->set_address(logBlockAddress);
 		eventOps->set_next(*newEvent);
 		eventOps = newEvent;
 
@@ -284,8 +298,8 @@ enum status Ftl::write(Event &event)
 			exit(MEM_ERR);
 		}
 
-		Address a = resolve_logical_address(newDataBlock.get_linear_address() + i);
-		newEvent->set_address(a);
+		Address dataBlockAddress = new Address(newDataBlock.get_linear_address() + i, PAGE);
+		newEvent->set_address(dataBlockAddress);
 
 		eventOps->set_next(*newEvent);
 		eventOps = newEvent;
@@ -299,25 +313,6 @@ enum status Ftl::write(Event &event)
 	return SUCCESS;
 }
 
-inline Address Ftl::resolve_logical_address(uint logical_address)
-{
-	assert(logical_address >= 0);
-
-	Address address;
-	address.page = logical_address % BLOCK_SIZE;
-	logical_address /= BLOCK_SIZE;
-	address.block = logical_address % PLANE_SIZE;
-	logical_address /= PLANE_SIZE;
-	address.plane = logical_address % DIE_SIZE;
-	logical_address /= DIE_SIZE;
-	address.die = logical_address % PACKAGE_SIZE;
-	logical_address /= PACKAGE_SIZE;
-	address.package = logical_address % SSD_SIZE;
-	logical_address /= SSD_SIZE;
-	address.valid = PAGE;
-
-	return address;
-}
 
 enum status Ftl::erase(Event &event)
 {
@@ -352,13 +347,11 @@ enum page_state Ftl::get_state(const Address &address) const
 
 enum status Ftl::get_free_block(Address &address)
 {
-	currentPage += BLOCK_SIZE;
-	address = resolve_logical_address(currentPage);
+	address.set_linear_address(currentPage, PAGE);
 
+	currentPage += BLOCK_SIZE;
 	if (controller.get_block_state(address) == FREE)
-	{
 		return SUCCESS;
-	}
 
 	fprintf(stderr, "No free pages left for FTL.\n");
 	return FAILURE;

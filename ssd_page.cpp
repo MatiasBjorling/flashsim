@@ -70,7 +70,7 @@ enum status Page::_read(Event &event)
 	if(state == VALID || state == EMPTY){
 		event.incr_time_taken(read_delay);
 		if (PAGE_ENABLE_DATA)
-			global_buffer = (char*)page_data + event.get_address().get_linear_address();
+			global_buffer = (char*)page_data + event.get_address().get_linear_address()*PAGE_SIZE;
 
 		if (state == EMPTY)
 			fprintf(stderr, "Reading from empty page.\n");
@@ -87,7 +87,10 @@ enum status Page::_write(Event &event)
 		state = VALID;
 		if (PAGE_ENABLE_DATA && event.get_payload() != NULL)
 		{
-			void *data = (char*)page_data + event.get_address().get_linear_address();
+			//printf("%p %i\n",page_data,event.get_address().get_linear_address()*PAGE_SIZE);
+
+			void *data = (char*)page_data + event.get_address().get_linear_address()*PAGE_SIZE;
+
 			memcpy (data, event.get_payload(), PAGE_SIZE);
 		}
 		return SUCCESS;

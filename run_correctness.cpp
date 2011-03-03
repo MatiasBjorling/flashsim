@@ -28,10 +28,42 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <string.h>
 
 using namespace ssd;
 
-#define GARBAGEPATH "/home/silverwolf/workspace/randomgarbage"
+#define GARBAGEPATH "/home/silverwolf/workspace/randomgarbagesmall"
+
+void do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
+{
+	unsigned int adr, i = 0;
+	for (adr = 0; adr < file_size;adr += PAGE_SIZE)
+	{
+		ssd->event_arrive(type, i, 1, (double) adr, (char*)test + adr);
+		if (type == READ)
+		{
+			if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)
+				fprintf(stderr, "Err. Data does not compare. i: %i\n", i);
+		}
+		//printf("i: %i\n", i);
+		i++;
+	}
+}
+
+void do_seq_backward(Ssd *ssd, event_type type, void *test, unsigned int file_size)
+{
+	unsigned int adr, i = 0;
+	for (adr = file_size-PAGE_SIZE; adr > 0;adr -= PAGE_SIZE)
+	{
+		ssd->event_arrive(type, i, 1, file_size-(double) adr, (char*)test + adr);
+		if (type == READ)
+		{
+			if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)
+				fprintf(stderr, "Err. Data does not compare. i: %i\n", i);
+		}
+		i++;
+	}
+}
 
 int main()
 {
@@ -53,24 +85,39 @@ int main()
 
 	/*
 	 * Experiment setup
-	 * 1. Do linear
+	 * 1. Do linear write and read.
+	 * 2. Write linear again and  read.
 	 * 2. Do semi-random linear
 	 * 3. Do random
 	 * 4. Do backward linear
 	 */
-	double result;
-	unsigned int adr,i=0;
-	printf("arg: %i\n", st.st_size);
-	// Linear
-	for (adr = 0; adr < st.st_size;adr += BLOCK_SIZE)
-	{
-		result = ssd -> event_arrive(WRITE, i, 1, (double) adr, (char*)test_data + adr);
-		i++;
 
-		if (i==1000)
-			break;
-	}
+	printf("Test 1. Write sequential test data.\n");
+	do_seq(ssd, WRITE, test_data, st.st_size);
 
+	printf("Test 2. Read sequential test data.\n");
+	do_seq(ssd, READ, test_data, st.st_size);
+
+	printf("Test 3. Write second write.\n");
+	do_seq(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 4. Write third write.\n");
+	do_seq(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 5. Read sequential test data.\n");
+	do_seq(ssd, READ, test_data, st.st_size);
+
+	printf("Test 6. Write backward sequential test data.\n");
+	do_seq_backward(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 7. Read backward sequential test data.\n");
+	do_seq_backward(ssd, READ, test_data, st.st_size);
+
+	printf("Test 8. Write backward sequential test data again.\n");
+	do_seq_backward(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 7. Read backward sequential test data.\n");
+	do_seq_backward(ssd, READ, test_data, st.st_size);
 
 
 	delete ssd;
