@@ -95,6 +95,16 @@ const Address &Event::get_merge_address(void) const
 	return merge_address;
 }
 
+const Address &Event::get_log_address(void) const
+{
+	return log_address;
+}
+
+void Event::set_log_address(const Address &address)
+{
+	log_address = address;
+}
+
 ssd::uint Event::get_size(void) const
 {
 	return size;

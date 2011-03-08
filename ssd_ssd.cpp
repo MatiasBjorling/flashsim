@@ -265,6 +265,12 @@ enum status Ssd::merge(Event &event)
 	return data[event.get_address().package].merge(event);
 }
 
+enum status Ssd::merge_replacement_block(Event &event)
+{
+	//assert(data != NULL && event.get_address().package < size && event.get_address().valid >= PACKAGE && event.get_log_address().valid >= PACKAGE);
+	return SUCCESS;
+}
+
 /* add up the erases remaining for all packages in the ssd*/
 ssd::ulong Ssd::get_erases_remaining(const Address &address) const
 {

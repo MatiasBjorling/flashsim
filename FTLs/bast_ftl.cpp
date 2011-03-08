@@ -34,31 +34,29 @@
 
 using namespace ssd;
 
-LogPageBlock::LogPageBlock():
-		state(FREE)
+LogPageBlock::LogPageBlock()
 {
 	pages = new int[BLOCK_SIZE];
+
 	for (uint i=0;i<BLOCK_SIZE;i++)
-	{
 		pages[i] = -1;
-	}
+
 }
 
 void LogPageBlock::Reset()
 {
 	for (uint i=0;i<BLOCK_SIZE;i++)
-	{
 		pages[i] = -1;
-	}
-	state = FREE;
-	address = -1;
-	numValidPages = 0;
+
+	address.valid = NONE;
 }
 
 LogPageBlock::~LogPageBlock()
 {
 	delete [] pages;
 }
+
+
 
 Ftl::Ftl(Controller &controller):
 	controller(controller),
@@ -126,7 +124,7 @@ enum status Ftl::read(Event &event)
 	// If page is in the log block
 	if (logBlock->pages[eventAddress.page] != -1)
 	{
-		Address returnAddress = new Address(logBlock->address+logBlock->pages[eventAddress.page], PAGE);
+		Address returnAddress = new Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
 		event.set_address(returnAddress);
 		controller.issue(event);
 	} else {
@@ -148,10 +146,10 @@ enum status Ftl::set_new_logblock(LogPageBlock *logBlock)
 		return FAILURE;
 
 	// Maintain page-level block structure.
-	logBlock->state = ACTIVE;
-	logBlock->address = newLogBlock.get_linear_address();
+	//logBlock->state = ACTIVE;
+	logBlock->address = new Address(newLogBlock.get_linear_address(), BLOCK);
 
-	printf("Using new log block with address: %i\n", logBlock->address);
+	printf("Using new log block with address: %i\n", logBlock->address.get_linear_address());
 
 	return SUCCESS;
 }
@@ -165,38 +163,26 @@ enum status Ftl::write(Event &event)
 
 	LogPageBlock *logBlock = &log_list[lookupBlock];
 
-
-	if (logBlock->state == INACTIVE)
-		return FAILURE;
-
-	if (logBlock->state == FREE)
-	{
+	// Go here when we initilize the log block.
+	if (logBlock->address.valid == NONE)
 		set_new_logblock(logBlock);
 
-		logBlock->pages[eventAddress.page] = 0;
-		logBlock->numValidPages++;
-
-		Address logBlockAddress = new Address(logBlock->address, PAGE);
-		event.set_address(logBlockAddress);
-
-		return controller.issue(event);;
-	}
+	block_state logBlockState = controller.get_block_state(logBlock->address);
+	if (logBlockState == INACTIVE)
+		return FAILURE;
 
 	// Can it fit inside the existing log block. Issue the request.
-	if (logBlock->numValidPages < BLOCK_SIZE)
+	uint numValid = controller.get_num_valid(&logBlock->address);
+	if (numValid < BLOCK_SIZE)
 	{
+		logBlock->pages[eventAddress.page] = numValid;
 
-		logBlock->pages[eventAddress.page] = logBlock->numValidPages;
-
-		Address logBlockAddress = new Address(logBlock->address + logBlock->numValidPages, PAGE);
+		Address logBlockAddress = logBlock->address;
+		controller.get_free_page(logBlockAddress);
 
 		event.set_address(logBlockAddress);
-		if (controller.issue(event) == FAILURE)
-			return FAILURE;
 
-		logBlock->numValidPages++;
-
-		return SUCCESS;
+		return controller.issue(event);
 	}
 
 	// No space. Merging required.
@@ -221,7 +207,7 @@ enum status Ftl::write(Event &event)
 		if (data_list[lookupBlock] != -1)
 			invalid_list[data_list[lookupBlock]] = 1; // Cleaned at next run.
 
-		data_list[lookupBlock] = logBlock->address;
+		data_list[lookupBlock] = logBlock->address.get_linear_address();
 
 		// Clear the log block for incoming I/Os to the same block.
 		logBlock->Reset();
@@ -229,9 +215,12 @@ enum status Ftl::write(Event &event)
 		set_new_logblock(logBlock);
 
 		logBlock->pages[eventAddress.page] = 0;
-		logBlock->numValidPages++;
+		//logBlock->numValidPages++;
 
-		Address logBlockAddress = new Address(logBlock->address, PAGE);
+
+		//Address logBlockAddress = new Address(logBlock->address, PAGE);
+		Address logBlockAddress = logBlock->address;
+		controller.get_free_page(logBlockAddress);
 
 		event.set_address(logBlockAddress);
 
@@ -240,75 +229,75 @@ enum status Ftl::write(Event &event)
 		return controller.issue(event);
 	}
 
-
-	/* 1. Write page to new data block
-	 * 1a Promote new log block.
-	 * 2. Create BLOCK_SIZE reads
-	 * 3. Create BLOCK_SIZE writes
-	 * 4. Invalidate data block
-	 * 5. promote new block as data block
-	 * 6. put data and log block into the invalidate list.
-	 */
-
-
-	Address newLogBlock;
-	if (get_free_block(newLogBlock) == FAILURE)
-		return FAILURE;
-
-	event.set_address(newLogBlock);
-
-	// Invalidate log and data block
-	invalid_list[logBlock->address] = 1;
-	if (data_list[lookupBlock] != -1)
-		invalid_list[data_list[lookupBlock]] = 1;
-
-	// Create new log block
-	logBlock->Reset();
-	logBlock->state = ACTIVE;
-	logBlock->pages[eventAddress.page] = logBlock->numValidPages;
-	logBlock->address = newLogBlock.get_linear_address();
-	newLogBlock.page = logBlock->numValidPages;
-	logBlock->numValidPages++;
-
-	// Simulate merge (n reads, n writes and 2 erases (gc'ed))
-	Address newDataBlock;
-	if (get_free_block(newDataBlock) == FAILURE)
-		return FAILURE;
-
-	data_list[lookupBlock] = newDataBlock.get_linear_address();
-
-	Event *eventOps = &event;
-	for (uint i=0;i<BLOCK_SIZE;i++)
-	{
-		Event *newEvent = NULL;
-		if((newEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time())) == NULL)
-		{
-			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);
-			exit(MEM_ERR);
-		}
-
-		Address logBlockAddress = new Address(logBlock->address+i, PAGE);
-		newEvent->set_address(logBlockAddress);
-		eventOps->set_next(*newEvent);
-		eventOps = newEvent;
-
-		if((newEvent = new Event(WRITE, event.get_logical_address(), 1, event.get_start_time())) == NULL)
-		{
-			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);
-			exit(MEM_ERR);
-		}
-
-		Address dataBlockAddress = new Address(newDataBlock.get_linear_address() + i, PAGE);
-		newEvent->set_address(dataBlockAddress);
-
-		eventOps->set_next(*newEvent);
-		eventOps = newEvent;
-	}
-
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
-
-	event.consolidate_metaevent(event);
+//
+//	/* 1. Write page to new data block
+//	 * 1a Promote new log block.
+//	 * 2. Create BLOCK_SIZE reads
+//	 * 3. Create BLOCK_SIZE writes
+//	 * 4. Invalidate data block
+//	 * 5. promote new block as data block
+//	 * 6. put data and log block into the invalidate list.
+//	 */
+//
+//
+//	Address newLogBlock;
+//	if (get_free_block(newLogBlock) == FAILURE)
+//		return FAILURE;
+//
+//	event.set_address(newLogBlock);
+//
+//	// Invalidate log and data block
+//	invalid_list[logBlock->address] = 1;
+//	if (data_list[lookupBlock] != -1)
+//		invalid_list[data_list[lookupBlock]] = 1;
+//
+//	// Create new log block
+//	logBlock->Reset();
+//	logBlock->state = ACTIVE;
+//	logBlock->pages[eventAddress.page] = logBlock->numValidPages;
+//	logBlock->address = newLogBlock.get_linear_address();
+//	newLogBlock.page = logBlock->numValidPages;
+//	logBlock->numValidPages++;
+//
+//	// Simulate merge (n reads, n writes and 2 erases (gc'ed))
+//	Address newDataBlock;
+//	if (get_free_block(newDataBlock) == FAILURE)
+//		return FAILURE;
+//
+//	data_list[lookupBlock] = newDataBlock.get_linear_address();
+//
+//	Event *eventOps = &event;
+//	for (uint i=0;i<BLOCK_SIZE;i++)
+//	{
+//		Event *newEvent = NULL;
+//		if((newEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time())) == NULL)
+//		{
+//			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);
+//			exit(MEM_ERR);
+//		}
+//
+//		Address logBlockAddress = new Address(logBlock->address+i, PAGE);
+//		newEvent->set_address(logBlockAddress);
+//		eventOps->set_next(*newEvent);
+//		eventOps = newEvent;
+//
+//		if((newEvent = new Event(WRITE, event.get_logical_address(), 1, event.get_start_time())) == NULL)
+//		{
+//			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);
+//			exit(MEM_ERR);
+//		}
+//
+//		Address dataBlockAddress = new Address(newDataBlock.get_linear_address() + i, PAGE);
+//		newEvent->set_address(dataBlockAddress);
+//
+//		eventOps->set_next(*newEvent);
+//		eventOps = newEvent;
+//	}
+//
+//	if (controller.issue(event) == FAILURE)
+//		return FAILURE;
+//
+//	event.consolidate_metaevent(event);
 
 	return SUCCESS;
 }

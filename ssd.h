@@ -210,9 +210,8 @@ public:
 	LogPageBlock(void);
 	~LogPageBlock(void);
 	int *pages;
-	uint numValidPages;
-	enum block_state state;
-	long address;
+	Address address;
+
 	void Reset();
 };
 
@@ -229,6 +228,7 @@ public:
 	ulong get_logical_address(void) const;
 	const Address &get_address(void) const;
 	const Address &get_merge_address(void) const;
+	const Address &get_log_address(void) const;
 	uint get_size(void) const;
 	enum event_type get_event_type(void) const;
 	double get_start_time(void) const;
@@ -237,6 +237,7 @@ public:
 	Event *get_next(void) const;
 	void set_address(const Address &address);
 	void set_merge_address(const Address &address);
+	void set_log_address(const Address &address);
 	void set_next(Event &next);
 	void set_payload(void *payload);
 	void *get_payload(void) const;
@@ -251,6 +252,7 @@ private:
 	ulong logical_address;
 	Address address;
 	Address merge_address;
+	Address log_address;
 	uint size;
 	void *payload;
 	Event *next;
@@ -585,6 +587,7 @@ private:
 	enum status write(Event &event);
 	enum status erase(Event &event);
 	enum status merge(Event &event);
+	enum status merge_replacement_block(Event &event);
 	ulong get_erases_remaining(const Address &address) const;
 	void update_wear_stats(const Address &address);
 	void get_least_worn(Address &address) const;

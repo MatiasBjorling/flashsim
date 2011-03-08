@@ -56,7 +56,6 @@ enum status Ftl::read(Event &event)
 		return FAILURE;
 	}
 
-
 	// Lookup mapping
 	event.set_address(resolve_logical_address(map[event.get_logical_address()]));
 
