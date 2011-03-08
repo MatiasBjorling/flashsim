@@ -117,13 +117,16 @@ enum status Plane::write(Event &event)
 {
 	assert(event.get_address().block < size && event.get_address().valid > PLANE && next_page.valid >= BLOCK);
 	enum block_state prev = data[event.get_address().block].get_state();
+	status s = data[event.get_address().block].write(event);
+
 	if(event.get_address().block == next_page.block)
 		/* if all blocks in the plane are full and this function fails,
 		 * the next_page address valid field will be set to PLANE */
 		(void) get_next_page();
 	if(prev == FREE && data[event.get_address().block].get_state() != FREE)
 		free_blocks--;
-	return data[event.get_address().block].write(event);
+
+	return s;
 }
 
 /* if no errors
