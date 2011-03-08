@@ -1,10 +1,9 @@
-Copyright 2011, Matias Bjørling
+Author: Matias Bjørling, 2011
 
 This project track changes for a work-in-progress implementation 
 of various FTL algorithms.
 
-The FTL algorihms are implemented using the Object-Oriented 
-Flash based SSD simulator by:
+The FTL algorihms are based on the Flash based SSD simulator implementation created by:
 
 Brendan Tauras btauras<code>at</code>gmail<code>dot</code>com
 Youngjae Kim
