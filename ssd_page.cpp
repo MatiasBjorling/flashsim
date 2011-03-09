@@ -26,7 +26,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <exception>
+#include <stdexcept>
 
 #include "ssd.h"
 
@@ -68,34 +68,34 @@ Page::~Page(void)
 enum status Page::_read(Event &event)
 {
 	assert(read_delay >= 0.0);
-	if(state == VALID || state == EMPTY){
-		event.incr_time_taken(read_delay);
-		if (PAGE_ENABLE_DATA)
-			global_buffer = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
+	assert(state == VALID || state == EMPTY);
 
-		if (state == EMPTY)
-			fprintf(stderr, "Reading from empty page.\n");
-		return SUCCESS;
-	} else
-		return FAILURE;
+	event.incr_time_taken(read_delay);
+	if (PAGE_ENABLE_DATA)
+		global_buffer = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
+
+	if (state == EMPTY)
+		fprintf(stderr, "Reading from empty page.\n");
+
+	return SUCCESS;
+
 }
 
 enum status Page::_write(Event &event)
 {
 	assert(write_delay >= 0.0);
-	if(state == EMPTY){
-		event.incr_time_taken(write_delay);
-		state = VALID;
-		if (PAGE_ENABLE_DATA && event.get_payload() != NULL)
-		{
-			//printf("%p %i\n",page_data,event.get_address().get_linear_address()*PAGE_SIZE);
+	assert(state == EMPTY);
 
-			void *data = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
-			memcpy (data, event.get_payload(), PAGE_SIZE);
-		}
-		return SUCCESS;
-	} else
-		return FAILURE;
+
+	event.incr_time_taken(write_delay);
+	state = VALID;
+	if (PAGE_ENABLE_DATA && event.get_payload() != NULL)
+	{
+		void *data = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
+		memcpy (data, event.get_payload(), PAGE_SIZE);
+	}
+	return SUCCESS;
+
 }
 
 const Block &Page::get_parent(void) const

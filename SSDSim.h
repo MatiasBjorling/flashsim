@@ -22,8 +22,8 @@ extern "C" {
 
 void SSD_Initialize();
 void SSD_Cleanup();
-void SSD_Write(unsigned long long address, int size);
-void SSD_Read(unsigned long long address, int size);
+void SSD_Write(unsigned long long address, int size, void *buf);
+void SSD_Read(unsigned long long address, int size, void *buf);
 
 #ifdef __cplusplus
 } // extern "C"

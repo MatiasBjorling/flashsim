@@ -240,6 +240,7 @@ public:
 	void set_log_address(const Address &address);
 	void set_next(Event &next);
 	void set_payload(void *payload);
+	void set_event_type(const enum event_type &type);
 	void *get_payload(void) const;
 	double incr_bus_wait_time(double time);
 	double incr_time_taken(double time_incr);

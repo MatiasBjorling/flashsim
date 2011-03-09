@@ -115,6 +115,11 @@ enum event_type Event::get_event_type(void) const
 	return type;
 }
 
+void Event::set_event_type(const enum event_type &type)
+{
+	this->type = type;
+}
+
 double Event::get_start_time(void) const
 {
 	assert(start_time >= 0.0);

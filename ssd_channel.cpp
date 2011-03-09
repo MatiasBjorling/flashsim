@@ -35,6 +35,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <algorithm>
+#include <stdexcept>
 #include "ssd.h"
 
 using namespace ssd;
@@ -172,7 +173,7 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 
 	/* give up if no free table slots */
 	if(table_entries >= table_size)
-		return FAILURE;
+		throw std::overflow_error("table_entries >= table_size. Increase bus table size");
 	
 	uint i = 0;
 	double sched_time = BUS_CHANNEL_FREE_FLAG;

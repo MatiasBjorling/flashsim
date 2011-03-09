@@ -45,23 +45,27 @@ void do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 			if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)
 				fprintf(stderr, "Err. Data does not compare. i: %i\n", i);
 		}
-		//printf("i: %i\n", i);
 		i++;
 	}
 }
 
 void do_seq_backward(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 {
-	unsigned int adr, i = 0;
+	unsigned int adr, i = BLOCK_SIZE-1, j=0;
+
 	for (adr = file_size-PAGE_SIZE; adr > 0;adr -= PAGE_SIZE)
 	{
-		ssd->event_arrive(type, i, 1, file_size-(double) adr, (char*)test + adr);
+		ssd->event_arrive(type, j+i--, 1, file_size-(double) adr, (char*)test + adr);
 		if (type == READ)
 		{
 			if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)
 				fprintf(stderr, "Err. Data does not compare. i: %i\n", i);
 		}
-		i++;
+		if (i == -1)
+		{
+			i = BLOCK_SIZE - 1;
+			j += BLOCK_SIZE;
+		}
 	}
 }
 
@@ -95,29 +99,32 @@ int main()
 	printf("Test 1. Write sequential test data.\n");
 	do_seq(ssd, WRITE, test_data, st.st_size);
 
-//	printf("Test 2. Read sequential test data.\n");
-//	do_seq(ssd, READ, test_data, st.st_size);
-//
-//	printf("Test 3. Write second write.\n");
-//	do_seq(ssd, WRITE, test_data, st.st_size);
-//
-//	printf("Test 4. Write third write.\n");
-//	do_seq(ssd, WRITE, test_data, st.st_size);
-//
-//	printf("Test 5. Read sequential test data.\n");
-//	do_seq(ssd, READ, test_data, st.st_size);
-//
-//	printf("Test 6. Write backward sequential test data.\n");
-//	do_seq_backward(ssd, WRITE, test_data, st.st_size);
-//
-//	printf("Test 7. Read backward sequential test data.\n");
-//	do_seq_backward(ssd, READ, test_data, st.st_size);
-//
-//	printf("Test 8. Write backward sequential test data again.\n");
-//	do_seq_backward(ssd, WRITE, test_data, st.st_size);
-//
-//	printf("Test 7. Read backward sequential test data.\n");
-//	do_seq_backward(ssd, READ, test_data, st.st_size);
+	printf("Test 2. Read sequential test data.\n");
+	do_seq(ssd, READ, test_data, st.st_size);
+
+	printf("Test 3. Write second write.\n");
+	do_seq(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 4. Write third write.\n");
+	do_seq(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 5. Read sequential test data.\n");
+	do_seq(ssd, READ, test_data, st.st_size);
+
+	printf("Test 6. Write backward sequential test data.\n");
+	do_seq_backward(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 7. Read backward sequential test data.\n");
+	do_seq_backward(ssd, READ, test_data, st.st_size);
+
+	printf("Test 8. Write backward sequential test data again.\n");
+	do_seq_backward(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 9. Read backward sequential test data.\n");
+	do_seq_backward(ssd, READ, test_data, st.st_size);
+
+	printf("Test 9. Read backward sequential test data.\n");
+	do_seq_backward(ssd, READ, test_data, st.st_size);
 
 
 	delete ssd;

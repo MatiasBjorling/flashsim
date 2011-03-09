@@ -33,26 +33,26 @@ void SSD_Cleanup()
 	delete ssdImpl;
 }
 
-void SSD_Write(unsigned long long address, int size)
+void SSD_Write(unsigned long long address, int size, void *buf)
 {
 	gettimeofday(&ssd_request_time, NULL);
 
 	double time = ((ssd_request_time.tv_sec - ssd_boot_time.tv_sec) * 1000 + (ssd_request_time.tv_usec - ssd_boot_time.tv_usec) / 1000.0) + 0.5;
 
-	for (int i=0;i<size;i += 4096)
+	for (int i=0;i<size;i += PAGE_SIZE)
 	{
 		double result = ssdImpl->event_arrive(WRITE, address, 1, time, NULL);
 		printf("Write time address %llu (%i): %.20lf at %.3f\n", address, size, result, time);
 	}
 }
 
-void SSD_Read(unsigned long long address, int size)
+void SSD_Read(unsigned long long address, int size, void *buf)
 {
 	gettimeofday(&ssd_request_time, NULL);
 
 	double time = ((ssd_request_time.tv_sec - ssd_boot_time.tv_sec) * 1000 + (ssd_request_time.tv_usec - ssd_boot_time.tv_usec) / 1000.0) + 0.5;
 
-	for (int i=0;i<size;i += 4096)
+	for (int i=0;i<size;i += PAGE_SIZE)
 	{
 		double result = ssdImpl->event_arrive(READ, address, 1, time, NULL);
 		printf("Read time %llu (%i): %.20lf at %.3f\n", address, size, result, time);
