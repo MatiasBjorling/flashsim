@@ -41,7 +41,7 @@ Garbage_collector::~Garbage_collector(void)
 	return;
 }
 
-enum status Garbage_collector::collect(Event &event)
+void Garbage_collector::clean(Address &address)
 {
-	return SUCCESS;
+
 }

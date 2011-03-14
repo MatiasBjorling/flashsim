@@ -145,7 +145,7 @@ void Address::print(FILE *stream)
 	return;
 }
 
-void Address::set_linear_address(uint address)
+void Address::set_linear_address(ulong address)
 {
 	real_address = address;
 	page = address % BLOCK_SIZE;
@@ -160,13 +160,13 @@ void Address::set_linear_address(uint address)
 	address /= SSD_SIZE;
 }
 
-void Address::set_linear_address(uint address, enum address_valid valid)
+void Address::set_linear_address(ulong address, enum address_valid valid)
 {
 	set_linear_address(address);
 	this->valid = valid;
 }
 
-unsigned int Address::get_linear_address() const
+unsigned long Address::get_linear_address() const
 {
 	return real_address;
 }

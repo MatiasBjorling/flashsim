@@ -27,6 +27,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <vector>
  
 #ifndef _SSD_H
 #define _SSD_H
@@ -150,6 +151,14 @@ enum status{FAILURE, SUCCESS};
  * 	the page field is not valid */
 enum address_valid{NONE, PACKAGE, DIE, PLANE, BLOCK, PAGE};
 
+/*
+ * Block type status
+ * used for the garbage collector specify what pool
+ * it should work with.
+ * the block types are log and data
+ */
+enum block_type {LOG,DATA};
+
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
  *
@@ -186,7 +195,7 @@ public:
 	uint plane;
 	uint block;
 	uint page;
-	uint real_address;
+	ulong real_address;
 	enum address_valid valid;
 	Address(void);
 	Address(const Address &address);
@@ -198,9 +207,9 @@ public:
 	enum address_valid compare(const Address &address) const;
 	void print(FILE *stream = stdout);
 	Address &operator=(const Address &rhs);
-	void set_linear_address(uint address, enum address_valid valid);
-	void set_linear_address(uint address);
-	unsigned int get_linear_address() const;
+	void set_linear_address(ulong address, enum address_valid valid);
+	void set_linear_address(ulong address);
+	ulong get_linear_address() const;
 };
 
 /* Class to emulate a log block with page-level mapping. */
@@ -473,7 +482,8 @@ class Garbage_collector
 public:
 	Garbage_collector(Ftl &FTL);
 	~Garbage_collector(void);
-	enum status collect(Event &event);
+private:
+	void clean(Address &address);
 };
 
 class Wear_leveler 
@@ -482,6 +492,33 @@ public:
 	Wear_leveler(Ftl &FTL);
 	~Wear_leveler(void);
 	enum status insert(const Address &address);
+};
+
+class Block_manager
+{
+public:
+	Block_manager(Ftl &ftl);
+	~Block_manager(void);
+	Address get_free_block();
+	Address get_free_block(block_type btype);
+	void invalidate(Address &address, block_type btype);
+	void print_statistics();
+	void insert_events(Event &event);
+	void promote_block(block_type to_type);
+private:
+	void get_page(Address &address);
+
+	ulong data_active;
+	ulong log_active;
+
+	ulong max_log_blocks;
+	ulong max_blocks;
+	std::vector<ulong> free_list;
+	std::vector<ulong> invalid_list;
+
+	// Until all pages have been requested, we serve them from a linear
+	// address space.
+	ulong simpleCurrentFree;
 };
 
 /* Ftl class has some completed functions that get info from lower-level
@@ -494,6 +531,7 @@ public:
 	~Ftl(void);
 	enum status read(Event &event);
 	enum status write(Event &event);
+	friend class Block_manager;
 private:
 	Address resolve_logical_address(unsigned int logicalAddress);
 	enum status erase(Event &event);
@@ -505,9 +543,7 @@ private:
 	enum block_state get_block_state(const Address &address) const;
 
 	Controller &controller;
-	Garbage_collector garbage;
-	Wear_leveler wear;
-
+	Block_manager manager;
 
 	// BAST
 	long *data_list;
@@ -518,8 +554,6 @@ private:
 
 	int addressShift;
 	int addressSize;
-
-	enum status get_free_block(Address &address);
 
 	// Simple Page-level mapping.
 	// Used by Page, BAST.

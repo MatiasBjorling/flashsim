@@ -56,8 +56,7 @@ LogPageBlock::~LogPageBlock()
 
 Ftl::Ftl(Controller &controller):
 	controller(controller),
-	garbage(*this),
-	wear(*this)
+	manager(*this)
 {
 	currentPage = 0;
 	addressShift = 0;
@@ -134,14 +133,9 @@ enum status Ftl::read(Event &event)
 
 enum status Ftl::set_new_logblock(LogPageBlock *logBlock)
 {
-	// Get a new block and promote it as the block for the request.
-	Address newLogBlock;
-	if (get_free_block(newLogBlock) == FAILURE)
-		return FAILURE;
+	logBlock->address = manager.get_free_block(LOG);
 
-	logBlock->address = new Address(newLogBlock.get_linear_address(), BLOCK);
-
-	printf("Using new log block with address: %i\n", logBlock->address.get_linear_address());
+	printf("Using new log block with address: %lu Block: %u\n", logBlock->address.get_linear_address(), logBlock->address.block);
 
 	return SUCCESS;
 }
@@ -155,7 +149,7 @@ enum status Ftl::write(Event &event)
 
 	LogPageBlock *logBlock = &log_list[lookupBlock];
 
-	// Go here when we initilize the log block.
+	// Go here when we initialise the log block.
 	if (logBlock->address.valid == NONE)
 		set_new_logblock(logBlock);
 
@@ -200,6 +194,7 @@ enum status Ftl::write(Event &event)
 		if (data_list[lookupBlock] != -1)
 			invalid_list[data_list[lookupBlock]] = 1; // Cleaned at next run.
 
+		manager.promote_block(DATA);
 		data_list[lookupBlock] = logBlock->address.get_linear_address();
 
 		// Clear the log block for incoming I/Os to the same block.
@@ -230,24 +225,15 @@ enum status Ftl::write(Event &event)
 	 * 6. put data and log block into the invalidate list.
 	 */
 
-	Address newDataBlock2;
-	if (get_free_block(newDataBlock2) == FAILURE)
-		return FAILURE;
+	Address newDataBlock = manager.get_free_block(DATA);
 
-	Address newDataBlock = new Address(newDataBlock2.get_linear_address(), BLOCK);
+	printf("Using new data block with address: %u Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
 
-	printf("Using new data block with address: %i\n", newDataBlock.get_linear_address());
+	Address newLogBlock = manager.get_free_block(LOG);
 
-	Address newLogBlock2;
-	if (get_free_block(newLogBlock2) == FAILURE)
-		return FAILURE;
-
-	Address newLogBlock = new Address(newLogBlock2.get_linear_address(), BLOCK);
-
-	printf("Using new log block with address: %i\n", newLogBlock.get_linear_address());
+	printf("Using new log block with address: %u Block: %u\n", newLogBlock.get_linear_address(), newLogBlock.block);
 
 	// Write the current io to a new block.
-
 	Address dataPage = newLogBlock;
 	dataPage.valid = PAGE;
 	event.set_address(dataPage);
@@ -296,20 +282,28 @@ enum status Ftl::write(Event &event)
 		eventOps = newEvent;
 	}
 
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
 
-	// Invalidate log and data block
-	invalid_list[lookupBlock] = 1;
+	// Invalidate inactive pages
+	manager.invalidate(logBlock->address, LOG);
 	if (data_list[lookupBlock] != -1)
-		invalid_list[data_list[lookupBlock]] = 1;
+	{
+		Address dBlock = new Address(data_list[lookupBlock], BLOCK);
+		manager.invalidate(dBlock, DATA);
+	}
+
 
 	// Update mapping
 	data_list[lookupBlock] = newDataBlock.get_linear_address();
 
+	// Add erase events if neccessary.
+	manager.insert_events(event);
+
 	logBlock->Reset();
 	logBlock->address = newLogBlock;
 	logBlock->pages[eventAddress.page] = 0;
+
+	if (controller.issue(event) == FAILURE)
+		return FAILURE;
 
 	event.consolidate_metaevent(event);
 
@@ -327,10 +321,10 @@ enum status Ftl::merge(Event &event)
 	return SUCCESS;
 }
 
-void Ftl::garbage_collect(Event &event)
-{
-	(void) garbage.collect(event);
-}
+//void Ftl::garbage_collect(Event &event)
+//{
+//	//(void) garbage.collect(event);
+//}
 
 ssd::ulong Ftl::get_erases_remaining(const Address &address) const
 {
@@ -348,14 +342,14 @@ enum page_state Ftl::get_state(const Address &address) const
 	return controller.get_state(address);
 }
 
-enum status Ftl::get_free_block(Address &address)
-{
-	address.set_linear_address(currentPage, PAGE);
-
-	currentPage += BLOCK_SIZE;
-	if (controller.get_block_state(address) == FREE)
-		return SUCCESS;
-
-	fprintf(stderr, "No free pages left for FTL.\n");
-	return FAILURE;
-}
+//enum status Ftl::get_free_block(Address &address)
+//{
+//	address.set_linear_address(currentPage, PAGE);
+//
+//	currentPage += BLOCK_SIZE;
+//	if (controller.get_block_state(address) == FREE)
+//		return SUCCESS;
+//
+//	fprintf(stderr, "No free pages left for FTL.\n");
+//	return FAILURE;
+//}

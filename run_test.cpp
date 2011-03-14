@@ -48,7 +48,7 @@ int main()
 //
 //		printf("Write time: %.20lf\n", result);
 ////		result = ssd -> event_arrive(WRITE, i+10240, 1, (double) 1);
-////		printf("Write time: %.20lf\n", result);
+////
 //	}
 //	for (int i = 0; i < SIZE; i++)
 //	{
