@@ -15,10 +15,16 @@
 
 using namespace ssd;
 
+
 Block_manager::Block_manager(Ftl &ftl)
 {
-	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
-	this->max_log_blocks = max_blocks;
+	/*
+	 * Configuration of blocks.
+	 * User-space is the number of blocks minus the
+	 * requirements for map directory.
+	 */
+	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE - MAP_DIRECTORY_SIZE;
+	max_log_blocks = max_blocks;
 	simpleCurrentFree = 0;
 	return;
 }
@@ -54,13 +60,18 @@ Address Block_manager::get_free_block()
 	return get_free_block(DATA);
 }
 
+/*
+ * Handles block manager statistics when changing a
+ * block to a data block from a log block or vice versa.
+ */
 void Block_manager::promote_block(block_type to_type)
 {
 	if (to_type == DATA)
 	{
 		data_active++;
 		log_active--;
-	} else if (to_type == LOG)
+	}
+	else if (to_type == LOG)
 	{
 		log_active++;
 		data_active--;
@@ -73,10 +84,10 @@ void Block_manager::print_statistics()
 	printf("-----------------\n");
 	printf("Block Statistics:\n");
 	printf("-----------------\n");
-	printf("Log blocks:  %i\n", log_active);
-	printf("Data blocks: %i\n", data_active);
-	printf("Free blocks: %i\n", (max_blocks - simpleCurrentFree) / BLOCK_SIZE + free_list.size());
-	printf("Invalid blocks: %i\n", invalid_list.size());
+	printf("Log blocks:  %u\n", log_active);
+	printf("Data blocks: %u\n", data_active);
+	printf("Free blocks: %u\n", (max_blocks - simpleCurrentFree) / BLOCK_SIZE + free_list.size());
+	printf("Invalid blocks: %u\n", invalid_list.size());
 	printf("-----------------\n");
 }
 
@@ -142,8 +153,19 @@ Address Block_manager::get_free_block(block_type type)
 		get_page(address);
 		log_active++;
 		break;
+	case MAP:
+
+		break;
 	}
 	return address;
 }
 
+void Block_manager::simulate_map_write(Event &events)
+{
+	// Implement me!
+}
+void Block_manager::simulate_map_read(Event &events)
+{
+	// Implement me!
+}
 

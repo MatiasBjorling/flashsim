@@ -19,6 +19,7 @@
 
 /* Configuration loader
  * Brendan Tauras 2009-11-02
+ * Matias Bjørling 2011-03
  *
  * Functions below provide basic configuration file parsing.  Config file
  * support includes skipping blank lines, comment lines (begin with a #).
@@ -125,6 +126,12 @@ bool PAGE_ENABLE_DATA = true;
  */
 void *page_data;
 
+/*
+ * Number of blocks to reserve for mappings. e.g. map directory in BAST.
+ */
+uint MAP_DIRECTORY_SIZE = 0;
+
+
 
 void load_entry(char *name, double value, uint line_number)
 {
@@ -172,6 +179,8 @@ void load_entry(char *name, double value, uint line_number)
 			else
 				PAGE_ENABLE_DATA = false;
 		}
+	else if (!strcmp(name, "MAP_DIRECTORY_SIZE"))
+		MAP_DIRECTORY_SIZE = value;
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;
@@ -240,6 +249,7 @@ void print_config(FILE *stream)
 	fprintf(stream, "PAGE_WRITE_DELAY: %.16lf\n", PAGE_WRITE_DELAY);
 	fprintf(stream, "PAGE_SIZE: %u\n", PAGE_SIZE);
 	fprintf(stream, "PAGE_ENABLE_DATA: %i\n", PAGE_ENABLE_DATA);
+	fprintf(stream, "MAP_DIRECTORY_SIZE: %i\n", MAP_DIRECTORY_SIZE);
 	return;
 }
 

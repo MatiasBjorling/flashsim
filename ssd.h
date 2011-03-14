@@ -109,6 +109,11 @@ extern const double PAGE_READ_DELAY;
 extern const double PAGE_WRITE_DELAY;
 extern const uint PAGE_SIZE;
 extern const bool PAGE_ENABLE_DATA;
+
+/*
+ * Mapping directory
+ */
+extern const uint MAP_DIRECTORY_SIZE;
 /*
  * Memory area to support pages with data.
  */
@@ -155,9 +160,9 @@ enum address_valid{NONE, PACKAGE, DIE, PLANE, BLOCK, PAGE};
  * Block type status
  * used for the garbage collector specify what pool
  * it should work with.
- * the block types are log and data
+ * the block types are log, data and map (Directory map usually)
  */
-enum block_type {LOG,DATA};
+enum block_type {LOG, DATA, MAP};
 
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
@@ -499,26 +504,39 @@ class Block_manager
 public:
 	Block_manager(Ftl &ftl);
 	~Block_manager(void);
+
+	// Usual suspects
 	Address get_free_block();
 	Address get_free_block(block_type btype);
 	void invalidate(Address &address, block_type btype);
 	void print_statistics();
 	void insert_events(Event &event);
 	void promote_block(block_type to_type);
+
+	// Map directory
+	void simulate_map_write(Event &events);
+	void simulate_map_read(Event &events);
 private:
 	void get_page(Address &address);
 
 	ulong data_active;
 	ulong log_active;
+	ulong map_active;
 
 	ulong max_log_blocks;
 	ulong max_blocks;
+
 	std::vector<ulong> free_list;
 	std::vector<ulong> invalid_list;
 
 	// Until all pages have been requested, we serve them from a linear
 	// address space.
 	ulong simpleCurrentFree;
+
+	// Counter for returning the next free page.
+	ulong directoryCurrentPage;
+	// Address on the current cached page in SRAM.
+	ulong directoryCachedPage;
 };
 
 /* Ftl class has some completed functions that get info from lower-level
