@@ -519,12 +519,17 @@ public:
 private:
 	void get_page(Address &address);
 
+	Ftl &ftl;
+
 	ulong data_active;
 	ulong log_active;
-	ulong map_active;
 
 	ulong max_log_blocks;
 	ulong max_blocks;
+
+	ulong max_map_pages;
+	ulong map_offset;
+	ulong map_space_capacity;
 
 	std::vector<ulong> free_list;
 	std::vector<ulong> invalid_list;
@@ -537,6 +542,8 @@ private:
 	ulong directoryCurrentPage;
 	// Address on the current cached page in SRAM.
 	ulong directoryCachedPage;
+
+
 };
 
 /* Ftl class has some completed functions that get info from lower-level

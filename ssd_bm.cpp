@@ -16,7 +16,7 @@
 using namespace ssd;
 
 
-Block_manager::Block_manager(Ftl &ftl)
+Block_manager::Block_manager(Ftl &ftl) : ftl(ftl)
 {
 	/*
 	 * Configuration of blocks.
@@ -25,6 +25,13 @@ Block_manager::Block_manager(Ftl &ftl)
 	 */
 	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE - MAP_DIRECTORY_SIZE;
 	max_log_blocks = max_blocks;
+
+	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
+	map_offset = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
+
+	map_space_capacity = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE / (SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE * 32 / 8 / PAGE_SIZE);
+
+	directoryCurrentPage = 0;
 	simpleCurrentFree = 0;
 	return;
 }
@@ -113,7 +120,6 @@ void Block_manager::insert_events(Event &event)
 {
 	//print_statistics();
 
-
 	// Goto last element and add eventual erase events.
 	Event *eventOps = &event;
 	while (eventOps->get_next() == NULL)
@@ -133,7 +139,6 @@ void Block_manager::insert_events(Event &event)
 	}
 
 	invalid_list.clear();
-
 }
 
 Address Block_manager::get_free_block(block_type type)
@@ -162,10 +167,46 @@ Address Block_manager::get_free_block(block_type type)
 
 void Block_manager::simulate_map_write(Event &events)
 {
-	// Implement me!
+	Event *eventOps = &events;
+	if (eventOps->get_next() != NULL)
+		while (eventOps->get_next() == NULL)
+			eventOps = eventOps->get_next();
+
+	Address address = new Address(map_offset + directoryCurrentPage, PAGE);
+
+	Event *writeEvent = new Event(WRITE, events.get_logical_address(), 1, events.get_start_time());
+	writeEvent->set_address(address);
+
+	eventOps->set_next(*writeEvent);
+	eventOps = writeEvent;
+
+	if (++directoryCurrentPage % BLOCK_SIZE == 0)
+	{
+		if (directoryCurrentPage == max_map_pages)
+			directoryCurrentPage = 0;
+
+		Address eraseAddress = new Address(map_offset + directoryCurrentPage, BLOCK);
+		if (ftl.get_block_state(eraseAddress) == ACTIVE)
+		{
+			Event *eraseEvent = new Event(ERASE, events.get_logical_address(), 1, events.get_start_time());
+			eraseEvent->set_address(eraseAddress);
+			eventOps->set_next(*eraseEvent);
+			eventOps = eraseEvent;
+		}
+	}
 }
 void Block_manager::simulate_map_read(Event &events)
 {
-	// Implement me!
-}
+	ulong inside_block = events.get_address().get_linear_address() / BLOCK_SIZE;
+	if (!(directoryCachedPage >= inside_block && (directoryCachedPage + map_space_capacity) > inside_block))
+	{
+		Event *eventOps = &events;
+		if (eventOps->get_next() != NULL)
+			while (eventOps->get_next() == NULL)
+				eventOps = eventOps->get_next();
 
+		Event *readEvent = new Event(READ, events.get_logical_address(), 1, events.get_start_time());
+		readEvent->set_address(events.get_address());
+		eventOps->set_next(*readEvent);
+	}
+}

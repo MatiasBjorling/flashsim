@@ -120,11 +120,17 @@ enum status Ftl::read(Event &event)
 	{
 		Address returnAddress = new Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
 		event.set_address(returnAddress);
+
+		manager.simulate_map_read(event);
+
 		return controller.issue(event);
 	} else {
 		// If page is in the data block
 		Address returnAddress = new Address(data_list[lookupBlock], PAGE);
 		event.set_address(returnAddress);
+
+		manager.simulate_map_read(event);
+
 		return controller.issue(event);
 	}
 
@@ -209,8 +215,10 @@ enum status Ftl::write(Event &event)
 
 		event.set_address(logBlockAddress);
 
+		manager.simulate_map_write(event);
+
 		printf("Wrote sequential\n");
-		// TODO: Update mapping with IO.
+
 		return controller.issue(event);
 	}
 
@@ -291,12 +299,14 @@ enum status Ftl::write(Event &event)
 		manager.invalidate(dBlock, DATA);
 	}
 
-
 	// Update mapping
 	data_list[lookupBlock] = newDataBlock.get_linear_address();
 
 	// Add erase events if neccessary.
 	manager.insert_events(event);
+
+	// Add write events if neccessary.
+	manager.simulate_map_write(event);
 
 	logBlock->Reset();
 	logBlock->address = newLogBlock;
@@ -340,6 +350,11 @@ void Ftl::get_least_worn(Address &address) const
 enum page_state Ftl::get_state(const Address &address) const
 {
 	return controller.get_state(address);
+}
+
+enum block_state Ftl::get_block_state(const Address &address) const
+{
+	return controller.get_block_state(address);
 }
 
 //enum status Ftl::get_free_block(Address &address)
