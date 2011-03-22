@@ -111,7 +111,6 @@ int main()
 	printf("Test 9. Read backward sequential test data.\n");
 	result += do_seq_backward(ssd, READ, test_data, st.st_size);
 
-	//printf("Write time: %.10lf (ns)\n", result);
 	printf("Write time: %.10lfs\n", result/1000000);
 	delete ssd;
 	return 0;

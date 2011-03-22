@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <vector>
+#include <queue>
+#include <map>
  
 #ifndef _SSD_H
 #define _SSD_H
@@ -109,6 +111,7 @@ extern const double PAGE_READ_DELAY;
 extern const double PAGE_WRITE_DELAY;
 extern const uint PAGE_SIZE;
 extern const bool PAGE_ENABLE_DATA;
+extern const uint PAGE_MAX_LOG;
 
 /*
  * Mapping directory
@@ -223,10 +226,13 @@ class LogPageBlock
 public:
 	LogPageBlock(void);
 	~LogPageBlock(void);
+
 	int *pages;
 	Address address;
+	int numPages;
 
-	void Reset();
+	bool operator() (const ssd::LogPageBlock& lhs, const ssd::LogPageBlock& rhs) const;
+	bool operator() (const ssd::LogPageBlock*& lhs, const ssd::LogPageBlock*& rhs) const;
 };
 
 
@@ -546,6 +552,8 @@ private:
 
 };
 
+
+
 /* Ftl class has some completed functions that get info from lower-level
  * hardware.  The other functions are in place as suggestions and can
  * be changed as you wish. */
@@ -571,11 +579,16 @@ private:
 	Block_manager manager;
 
 	// BAST
+	std::map<uint, LogPageBlock*> log_map;
+
 	long *data_list;
 	long *free_list;
-	LogPageBlock *log_list;
+	//LogPageBlock *log_list;
 	long *invalid_list;
-	enum status set_new_logblock(LogPageBlock *logBlock);
+	void dispose_logblock(LogPageBlock *logBlock, uint logicalBlockAddress);
+	void allocate_new_logblock(LogPageBlock *logBlock, uint logicalBlockAddress, Event &event);
+
+	bool isSequential(LogPageBlock* logBlock, uint logicalBlockaddress, Event &event);
 
 	int addressShift;
 	int addressSize;

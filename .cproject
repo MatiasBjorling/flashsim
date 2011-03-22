@@ -42,6 +42,9 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<fileInfo id="cdt.managedbuild.toolchain.gnu.base.1845303880.1261614488.1150991922" name="bast_ftl.cpp" rcbsApplicability="disable" resourcePath="FTLs/bast_ftl.cpp" toolsToInvoke="cdt.managedbuild.tool.gnu.cpp.compiler.base.540745092.1625023813">
+						<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.540745092.1625023813" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base.540745092"/>
+					</fileInfo>
 					<sourceEntries>
 						<entry excluding="run_correctness.cpp|nbd-server.c|run_trace.cpp|run_test2.cpp|ssd_ftl.cpp|FTLs/bast_ftl.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
@@ -1977,6 +1980,9 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<fileInfo id="cdt.managedbuild.toolchain.gnu.base.1845303880.2074101146.1470547701.841233369" name="bast_ftl.cpp" rcbsApplicability="disable" resourcePath="FTLs/bast_ftl.cpp" toolsToInvoke="cdt.managedbuild.tool.gnu.cpp.compiler.base.1277918823.54639848">
+						<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.1277918823.54639848" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base.1277918823"/>
+					</fileInfo>
 					<sourceEntries>
 						<entry excluding="run_test.cpp|nbd-server.c|run_trace.cpp|run_test2.cpp|ssd_ftl.cpp|FTLs/page_ftl.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>

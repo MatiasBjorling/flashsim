@@ -23,12 +23,20 @@
  * Notice: Startup procedures are not implemented as the drive is empty every time
  * the simulator is executed. i.e. OOB's is not filled with logical page address
  * at write and it is not read on startup to recreate mapping tables.
+ *
+ * Mapping table are implemented using simulation. A simulated read is performed
+ * every time a page read is out a cache log page. A cache log page usually hold approx.
+ * 1000 mappings.
+ *
+ * Second notice. Victim mappings still need to be implemented.
  */
 
 #include <new>
 #include <assert.h>
 #include <stdio.h>
 #include <math.h>
+#include <vector>
+#include <queue>
 #include "../ssd.h"
 
 using namespace ssd;
@@ -41,17 +49,16 @@ LogPageBlock::LogPageBlock()
 		pages[i] = -1;
 }
 
-void LogPageBlock::Reset()
-{
-	for (uint i=0;i<BLOCK_SIZE;i++)
-		pages[i] = -1;
-
-	address.valid = NONE;
-}
 
 LogPageBlock::~LogPageBlock()
 {
 	delete [] pages;
+}
+
+/* Comparison class for use by FTL to sort the LogPageBlock compared to the number of pages written. */
+bool LogPageBlock::operator() (const LogPageBlock& lhs, const LogPageBlock& rhs) const
+{
+	return lhs.numPages < rhs.numPages;
 }
 
 Ftl::Ftl(Controller &controller):
@@ -77,7 +84,7 @@ Ftl::Ftl(Controller &controller):
 	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
 	data_list = new long[numBlocks];
 	free_list = new long[numBlocks];
-	log_list = new LogPageBlock[numBlocks];
+	//log_list = new LogPageBlock[numBlocks];
 	invalid_list = new long[numBlocks];
 
 	for (uint i=0;i<numBlocks;i++)
@@ -87,7 +94,6 @@ Ftl::Ftl(Controller &controller):
 		invalid_list[i] = -1;
 	}
 
-
 	printf("Total mapping table size: %iKB\n", numBlocks * sizeof(uint) / 1024);
 	printf("Using BAST FTL.\n");
 	return;
@@ -96,6 +102,11 @@ Ftl::Ftl(Controller &controller):
 Ftl::~Ftl(void)
 {
 	delete map;
+
+	delete data_list;
+	delete free_list;
+	delete invalid_list;
+
 	return;
 }
 
@@ -106,9 +117,14 @@ enum status Ftl::read(Event &event)
 	Address eventAddress;
 	eventAddress.set_linear_address(event.get_logical_address());
 
-	LogPageBlock *logBlock = &log_list[lookupBlock];
+	LogPageBlock *logBlock = NULL;
 
-	if (data_list[lookupBlock] == -1 && logBlock->pages[eventAddress.page] == -1)
+	if (log_map.find(lookupBlock) != log_map.end())
+		logBlock = log_map[lookupBlock];
+
+	//LogPageBlock *logBlock = &log_list[lookupBlock];
+
+	if (data_list[lookupBlock] == -1 && logBlock != NULL && logBlock->pages[eventAddress.page] == -1)
 	{
 		event.set_address(new Address(0, PAGE));
 		fprintf(stderr, "Page read not written. Logical Address: %li\n", event.get_logical_address());
@@ -137,46 +153,35 @@ enum status Ftl::read(Event &event)
 	return FAILURE;
 }
 
-enum status Ftl::set_new_logblock(LogPageBlock *logBlock)
+
+void Ftl::allocate_new_logblock(LogPageBlock *logBlock, uint logicalBlockAddress, Event &event)
 {
-	logBlock->address = manager.get_free_block(LOG);
-
-	printf("Using new log block with address: %lu Block: %u\n", logBlock->address.get_linear_address(), logBlock->address.block);
-
-	return SUCCESS;
-}
-
-enum status Ftl::write(Event &event)
-{
-	uint lookupBlock = (event.get_logical_address() >> addressShift);
-
-	Address eventAddress;
-	eventAddress.set_linear_address(event.get_logical_address());
-
-	LogPageBlock *logBlock = &log_list[lookupBlock];
-
-	// Go here when we initialise the log block.
-	if (logBlock->address.valid == NONE)
-		set_new_logblock(logBlock);
-
-	block_state logBlockState = controller.get_block_state(logBlock->address);
-
-	assert(logBlockState != INACTIVE);
-
-	// Can it fit inside the existing log block. Issue the request.
-	uint numValid = controller.get_num_valid(&logBlock->address);
-	if (numValid < BLOCK_SIZE)
+	if (log_map.size() < PAGE_MAX_LOG)
 	{
-		logBlock->pages[eventAddress.page] = numValid;
+		logBlock = new LogPageBlock();
+		logBlock->address = manager.get_free_block(LOG);
+		printf("Using new log block with address: %lu Block: %u\n", logBlock->address.get_linear_address(), logBlock->address.block);
+	} else {
+		printf("boom!\n");
 
-		Address logBlockAddress = logBlock->address;
-		controller.get_free_page(logBlockAddress);
+		LogPageBlock *exLogBlock = (*log_map.begin()).second;
+		long dataBlock = data_list[logicalBlockAddress];
 
-		event.set_address(logBlockAddress);
 
-		return controller.issue(event);
+		// Perform merge
 	}
 
+	log_map[logicalBlockAddress] = logBlock;
+}
+
+void Ftl::dispose_logblock(LogPageBlock *logBlock, uint logicalBlockAddress)
+{
+	log_map.erase(logicalBlockAddress);
+	delete logBlock;
+}
+
+bool Ftl::isSequential(LogPageBlock* logBlock, uint logicalBlockaddress, Event &event)
+{
 
 	// No page space. Merging required.
 	/* 1. Log block merge
@@ -197,17 +202,18 @@ enum status Ftl::write(Event &event)
 	if (isSequential)
 	{
 		// Add to empty list i.e. switch without erasing the datablock.
-		if (data_list[lookupBlock] != -1)
-			invalid_list[data_list[lookupBlock]] = 1; // Cleaned at next run.
+		if (data_list[logicalBlockaddress] != -1)
+			invalid_list[data_list[logicalBlockaddress]] = 1; // Cleaned at next run.
 
 		manager.promote_block(DATA);
-		data_list[lookupBlock] = logBlock->address.get_linear_address();
 
-		// Clear the log block for incoming I/Os to the same block.
-		logBlock->Reset();
+		data_list[logicalBlockaddress] = logBlock->address.get_linear_address();
 
-		set_new_logblock(logBlock);
+		dispose_logblock(logBlock, logicalBlockaddress);
+		allocate_new_logblock(logBlock, logicalBlockaddress, event);
 
+		Address eventAddress;
+		eventAddress.set_linear_address(event.get_logical_address());
 		logBlock->pages[eventAddress.page] = 0;
 
 		Address logBlockAddress = logBlock->address;
@@ -219,8 +225,47 @@ enum status Ftl::write(Event &event)
 
 		printf("Wrote sequential\n");
 
+		//controller.issue(event);
+	}
+
+	return isSequential;
+}
+
+enum status Ftl::write(Event &event)
+{
+	uint lookupBlock = (event.get_logical_address() >> addressShift);
+
+	Address eventAddress;
+	eventAddress.set_linear_address(event.get_logical_address());
+
+	LogPageBlock *logBlock = NULL;
+
+	if (log_map.find(lookupBlock) == log_map.end())
+		allocate_new_logblock(logBlock, lookupBlock, event);
+
+	logBlock = log_map[lookupBlock];
+
+	block_state logBlockState = controller.get_block_state(logBlock->address);
+
+	assert(logBlockState != INACTIVE);
+
+	// Can it fit inside the existing log block. Issue the request.
+	uint numValid = controller.get_num_valid(&logBlock->address);
+	if (numValid < BLOCK_SIZE)
+	{
+		logBlock->pages[eventAddress.page] = numValid;
+
+		Address logBlockAddress = logBlock->address;
+		controller.get_free_page(logBlockAddress);
+
+		event.set_address(logBlockAddress);
+
 		return controller.issue(event);
 	}
+
+
+	if (isSequential(logBlock, lookupBlock, event))
+		return controller.issue(event);
 
 
 	// Do merge (n reads, n writes and 2 erases (gc'ed))
@@ -234,17 +279,7 @@ enum status Ftl::write(Event &event)
 	 */
 
 	Address newDataBlock = manager.get_free_block(DATA);
-
 	printf("Using new data block with address: %u Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
-
-	Address newLogBlock = manager.get_free_block(LOG);
-
-	printf("Using new log block with address: %u Block: %u\n", newLogBlock.get_linear_address(), newLogBlock.block);
-
-	// Write the current io to a new block.
-	Address dataPage = newLogBlock;
-	dataPage.valid = PAGE;
-	event.set_address(dataPage);
 
 	Event *eventOps = &event;
 	Event *newEvent = NULL;
@@ -302,15 +337,20 @@ enum status Ftl::write(Event &event)
 	// Update mapping
 	data_list[lookupBlock] = newDataBlock.get_linear_address();
 
-	// Add erase events if neccessary.
+	// Add erase events if necessary.
 	manager.insert_events(event);
 
-	// Add write events if neccessary.
+	// Add write events if necessary.
 	manager.simulate_map_write(event);
 
-	logBlock->Reset();
-	logBlock->address = newLogBlock;
+	dispose_logblock(logBlock, lookupBlock);
+	allocate_new_logblock(logBlock, lookupBlock, event);
+
+	// Write the current io to a new block.
 	logBlock->pages[eventAddress.page] = 0;
+	Address dataPage = logBlock->address;
+	dataPage.valid = PAGE;
+	event.set_address(dataPage);
 
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;
