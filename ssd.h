@@ -165,7 +165,7 @@ enum address_valid{NONE, PACKAGE, DIE, PLANE, BLOCK, PAGE};
  * it should work with.
  * the block types are log, data and map (Directory map usually)
  */
-enum block_type {LOG, DATA, MAP};
+enum block_type {LOG, DATA};
 
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
@@ -265,6 +265,7 @@ public:
 	double incr_bus_wait_time(double time);
 	double incr_time_taken(double time_incr);
 	void print(FILE *stream = stdout);
+	Event *get_last_event(Event &event) const;
 private:
 	double start_time;
 	double time_taken;
@@ -579,16 +580,17 @@ private:
 	Block_manager manager;
 
 	// BAST
-	std::map<uint, LogPageBlock*> log_map;
+	std::map<long, LogPageBlock*> log_map;
 
 	long *data_list;
 	long *free_list;
 	//LogPageBlock *log_list;
 	long *invalid_list;
-	void dispose_logblock(LogPageBlock *logBlock, uint logicalBlockAddress);
-	void allocate_new_logblock(LogPageBlock *logBlock, uint logicalBlockAddress, Event &event);
+	void dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress);
+	void allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
 
-	bool isSequential(LogPageBlock* logBlock, uint logicalBlockaddress, Event &event);
+	bool is_sequential(LogPageBlock* logBlock, long logicalBlockaddress, Event &event);
+	bool random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
 
 	int addressShift;
 	int addressSize;

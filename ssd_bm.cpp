@@ -91,10 +91,10 @@ void Block_manager::print_statistics()
 	printf("-----------------\n");
 	printf("Block Statistics:\n");
 	printf("-----------------\n");
-	printf("Log blocks:  %u\n", log_active);
-	printf("Data blocks: %u\n", data_active);
-	printf("Free blocks: %u\n", (max_blocks - simpleCurrentFree) / BLOCK_SIZE + free_list.size());
-	printf("Invalid blocks: %u\n", invalid_list.size());
+	printf("Log blocks:  %lu\n", log_active);
+	printf("Data blocks: %lu\n", data_active);
+	printf("Free blocks: %lu\n", (max_blocks - simpleCurrentFree) / BLOCK_SIZE + free_list.size());
+	printf("Invalid blocks: %lu\n", invalid_list.size());
 	printf("-----------------\n");
 }
 
@@ -121,9 +121,7 @@ void Block_manager::insert_events(Event &event)
 	//print_statistics();
 
 	// Goto last element and add eventual erase events.
-	Event *eventOps = &event;
-	while (eventOps->get_next() == NULL)
-		eventOps = eventOps->get_next();
+	Event *eventOps = event.get_last_event(event);
 
 	for (std::vector<ulong>::iterator it = invalid_list.begin(); it != invalid_list.end(); it++)
 	{
@@ -158,19 +156,13 @@ Address Block_manager::get_free_block(block_type type)
 		get_page(address);
 		log_active++;
 		break;
-	case MAP:
-
-		break;
 	}
 	return address;
 }
 
 void Block_manager::simulate_map_write(Event &events)
 {
-	Event *eventOps = &events;
-	if (eventOps->get_next() != NULL)
-		while (eventOps->get_next() == NULL)
-			eventOps = eventOps->get_next();
+	Event *eventOps = events.get_last_event(events);
 
 	Address address = new Address(map_offset + directoryCurrentPage, PAGE);
 

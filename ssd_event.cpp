@@ -39,7 +39,8 @@ Event::Event(enum event_type type, ulong logical_address, uint size, double star
 	type(type),
 	logical_address(logical_address),
 	size(size),
-	next(NULL)
+	next(NULL),
+	payload(NULL)
 {
 	assert(start_time >= 0.0);
 	return;
@@ -183,6 +184,28 @@ double Event::incr_time_taken(double time_incr)
   	if(time_incr > 0.0)
 		time_taken += time_incr;
 	return time_taken;
+}
+
+Event *Event::get_last_event(Event &event) const
+{
+	Event *cur_event;
+
+//	printf("Traversing ");
+//	if (event.get_payload() != NULL)
+//		printf("p");
+//	else
+//		printf("o");
+
+	for(cur_event = &event; cur_event->next != NULL; cur_event = cur_event->next)
+	{
+//		if (cur_event->next->get_payload() != NULL)
+//			printf("p");
+//		else
+//			printf("o");
+	}
+//	printf("\n");
+
+	return cur_event;
 }
 
 void Event::print(FILE *stream)
