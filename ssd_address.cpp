@@ -171,6 +171,17 @@ unsigned long Address::get_linear_address() const
 	return real_address;
 }
 
+void Address::operator+(int i)
+{
+	set_linear_address(real_address + i);
+}
+
+void Address::operator+(uint i)
+{
+	set_linear_address(real_address + i);
+}
+
+
 Address &Address::operator=(const Address &rhs)
 {
 	if(this == &rhs)

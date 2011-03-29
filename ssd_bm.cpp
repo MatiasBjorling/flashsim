@@ -16,7 +16,7 @@
 using namespace ssd;
 
 
-Block_manager::Block_manager(Ftl &ftl) : ftl(ftl)
+Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 {
 	/*
 	 * Configuration of blocks.
@@ -148,7 +148,6 @@ Address Block_manager::get_free_block(block_type type)
 		get_page(address);
 		data_active++;
 		break;
-
 	case LOG:
 		if (log_active == max_log_blocks)
 			throw std::bad_alloc();

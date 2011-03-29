@@ -1,6 +1,6 @@
-/* Copyright 2009, 2010 Brendan Tauras */
+/* Copyright 2011 Matias Bjørling */
 
-/* ssd_gc.cpp is part of FlashSim. */
+/* ssd_ftlparent.cpp  */
 
 /* FlashSim is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,31 +17,38 @@
 
 /****************************************************************************/
 
-/* Garbage_collector class
-* Brendan Tauras 2009-11-04
-*
-* This class is a stub class for the user to use as a template for implementing
-* his/her garbage collector scheme.  The garbage collector class was added to
-* simplify and modularize the garbage collection in FTL schemes. */
+/*
+ * Implements parent interface for all FTL implementations to use.
+ */
 
-#include <new>
-#include <assert.h>
-#include <stdio.h>
 #include "ssd.h"
 
 using namespace ssd;
 
-Garbage_collector::Garbage_collector(FtlParent &ftl)
+
+FtlParent::FtlParent(Controller &controller) : controller(controller), manager(*this)
 {
 	return;
 }
 
-Garbage_collector::~Garbage_collector(void)
+
+ssd::ulong FtlParent::get_erases_remaining(const Address &address) const
 {
+	return controller.get_erases_remaining(address);
+}
+
+void FtlParent::get_least_worn(Address &address) const
+{
+	controller.get_least_worn(address);
 	return;
 }
 
-void Garbage_collector::clean(Address &address)
+enum page_state FtlParent::get_state(const Address &address) const
 {
+	return controller.get_state(address);
+}
 
+enum block_state FtlParent::get_block_state(const Address &address) const
+{
+	return controller.get_block_state(address);
 }

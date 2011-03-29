@@ -31,7 +31,7 @@
 
 using namespace ssd;
 
-Wear_leveler::Wear_leveler(Ftl &ftl)
+Wear_leveler::Wear_leveler(FtlParent &ftl)
 {
 
 	return;

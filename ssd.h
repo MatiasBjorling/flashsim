@@ -117,6 +117,12 @@ extern const uint PAGE_MAX_LOG;
  * Mapping directory
  */
 extern const uint MAP_DIRECTORY_SIZE;
+
+/*
+ * FTL Implementation
+ */
+extern const uint FTL_IMPLEMENTATION;
+
 /*
  * Memory area to support pages with data.
  */
@@ -165,7 +171,7 @@ enum address_valid{NONE, PACKAGE, DIE, PLANE, BLOCK, PAGE};
  * it should work with.
  * the block types are log, data and map (Directory map usually)
  */
-enum block_type {LOG, DATA};
+enum block_type {LOG, DATA, LOG_SEQ};
 
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
@@ -186,7 +192,12 @@ class Die;
 class Package;
 class Garbage_Collector;
 class Wear_Leveler;
-class Ftl;
+class Block_manager;
+class FtlParent;
+class FtlImpl_Page;
+class FtlImpl_Bast;
+class FtlImpl_Fast;
+
 class Ram;
 class Controller;
 class Ssd;
@@ -214,7 +225,11 @@ public:
 	enum address_valid check_valid(uint ssd_size = SSD_SIZE, uint package_size = PACKAGE_SIZE, uint die_size = DIE_SIZE, uint plane_size = PLANE_SIZE, uint block_size = BLOCK_SIZE);
 	enum address_valid compare(const Address &address) const;
 	void print(FILE *stream = stdout);
+
+	void operator+(int);
+	void operator+(uint);
 	Address &operator=(const Address &rhs);
+
 	void set_linear_address(ulong address, enum address_valid valid);
 	void set_linear_address(ulong address);
 	ulong get_linear_address() const;
@@ -492,7 +507,7 @@ private:
 class Garbage_collector 
 {
 public:
-	Garbage_collector(Ftl &FTL);
+	Garbage_collector(FtlParent &ftl);
 	~Garbage_collector(void);
 private:
 	void clean(Address &address);
@@ -501,7 +516,7 @@ private:
 class Wear_leveler 
 {
 public:
-	Wear_leveler(Ftl &FTL);
+	Wear_leveler(FtlParent &FTL);
 	~Wear_leveler(void);
 	enum status insert(const Address &address);
 };
@@ -509,7 +524,7 @@ public:
 class Block_manager
 {
 public:
-	Block_manager(Ftl &ftl);
+	Block_manager(FtlParent &ftl);
 	~Block_manager(void);
 
 	// Usual suspects
@@ -526,10 +541,11 @@ public:
 private:
 	void get_page(Address &address);
 
-	Ftl &ftl;
+	FtlParent &ftl;
 
 	ulong data_active;
 	ulong log_active;
+	ulong logseq_active;
 
 	ulong max_log_blocks;
 	ulong max_blocks;
@@ -549,43 +565,56 @@ private:
 	ulong directoryCurrentPage;
 	// Address on the current cached page in SRAM.
 	ulong directoryCachedPage;
-
-
 };
 
 
-
-/* Ftl class has some completed functions that get info from lower-level
- * hardware.  The other functions are in place as suggestions and can
- * be changed as you wish. */
-class Ftl 
+class FtlParent
 {
 public:
-	Ftl(Controller &controller);
-	~Ftl(void);
-	enum status read(Event &event);
-	enum status write(Event &event);
+	FtlParent(Controller &controller);
+
+	virtual enum status read(Event &event) = 0;
+	virtual enum status write(Event &event) = 0;
 	friend class Block_manager;
-private:
-	Address resolve_logical_address(unsigned int logicalAddress);
-	enum status erase(Event &event);
-	enum status merge(Event &event);
-	void garbage_collect(Event &event);
+
 	ulong get_erases_remaining(const Address &address) const;
 	void get_least_worn(Address &address) const;
 	enum page_state get_state(const Address &address) const;
 	enum block_state get_block_state(const Address &address) const;
 
+	Address resolve_logical_address(unsigned int logicalAddress);
+
+protected:
 	Controller &controller;
 	Block_manager manager;
+};
 
-	// BAST
+class FtlImpl_Page : public FtlParent
+{
+public:
+	FtlImpl_Page(Controller &controller);
+	~FtlImpl_Page();
+	enum status read(Event &event);
+	enum status write(Event &event);
+private:
+	Address resolve_logical_address(uint logicalAddress);
+
+	ulong currentPage;
+	long *map;
+};
+
+class FtlImpl_Bast : public FtlParent
+{
+public:
+	FtlImpl_Bast(Controller &controller);
+	~FtlImpl_Bast();
+	enum status read(Event &event);
+	enum status write(Event &event);
+private:
 	std::map<long, LogPageBlock*> log_map;
 
 	long *data_list;
-	long *free_list;
-	//LogPageBlock *log_list;
-	long *invalid_list;
+
 	void dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress);
 	void allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
 
@@ -594,12 +623,37 @@ private:
 
 	int addressShift;
 	int addressSize;
-
-	// Simple Page-level mapping.
-	// Used by Page, BAST.
-	ulong currentPage;
-	long *map;
 };
+
+class FtlImpl_Fast : public FtlParent
+{
+public:
+	FtlImpl_Fast(Controller &controller);
+	~FtlImpl_Fast();
+	enum status read(Event &event);
+	enum status write(Event &event);
+private:
+	std::map<long, LogPageBlock*> log_map;
+
+	long *data_list;
+
+	void dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress);
+	void allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
+
+	bool write_to_log_block(Event &event, long logicalBlockAddress);
+
+	void switch_sequential(long logicalBlockAddress, Event &event);
+	void merge_sequential(long logicalBlockAddress, Event &event);
+	bool random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
+
+	long sequential_logical_address;
+	Address sequential_address;
+	uint sequential_offset;
+
+	int addressShift;
+	int addressSize;
+};
+
 
 /* This is a basic implementation that only provides delay updates to events
  * based on a delay value multiplied by the size (number of pages) needed to
@@ -630,7 +684,10 @@ public:
 	Controller(Ssd &parent);
 	~Controller(void);
 	enum status event_arrive(Event &event);
-	friend class Ftl;
+	friend class FtlParent;
+	friend class FtlImpl_Page;
+	friend class FtlImpl_Bast;
+	friend class FtlImpl_Fast;
 private:
 	enum status issue(Event &event_list);
 	ssd::ulong get_erases_remaining(const Address &address) const;
@@ -642,7 +699,7 @@ private:
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
 	Ssd &ssd;
-	Ftl ftl;
+	FtlParent *ftl;
 };
 
 /* The SSD is the single main object that will be created to simulate a real

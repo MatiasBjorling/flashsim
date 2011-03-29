@@ -39,23 +39,37 @@
 using namespace ssd;
 
 Controller::Controller(Ssd &parent):
-	ssd(parent),
-	ftl(*this)
+	ssd(parent)
 {
+	switch (FTL_IMPLEMENTATION)
+	{
+	case 0:
+		ftl = new FtlImpl_Page(*this);
+		break;
+	case 1:
+		ftl = new FtlImpl_Bast(*this);
+		break;
+	case 2:
+		ftl = new FtlImpl_Fast(*this);
+		break;
+	case 3:
+		break;
+	}
 	return;
 }
 
 Controller::~Controller(void)
 {
+	delete ftl;
 	return;
 }
 
 enum status Controller::event_arrive(Event &event)
 {
 	if(event.get_event_type() == READ)
-		return ftl.read(event);
+		return ftl->read(event);
 	else if(event.get_event_type() == WRITE)
-		return ftl.write(event);
+		return ftl->write(event);
 	else
 		fprintf(stderr, "Controller: %s: Invalid event type\n", __func__);
 	return FAILURE;

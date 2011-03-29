@@ -27,10 +27,8 @@
 
 using namespace ssd;
 
-Ftl::Ftl(Controller &controller):
-	controller(controller),
-	garbage(*this),
-	wear(*this)
+FtlImpl_Page::FtlImpl_Page(Controller &controller):
+	FtlParent(controller)
 {
 	currentPage = 0;
 
@@ -42,13 +40,13 @@ Ftl::Ftl(Controller &controller):
 	return;
 }
 
-Ftl::~Ftl(void)
+FtlImpl_Page::~FtlImpl_Page(void)
 {
 	delete map;
 	return;
 }
 
-enum status Ftl::read(Event &event)
+enum status FtlImpl_Page::read(Event &event)
 {
 	if (map[event.get_logical_address()] == -1)
 	{
@@ -76,7 +74,7 @@ enum status Ftl::read(Event &event)
 	return SUCCESS;
 }
 
-enum status Ftl::write(Event &event)
+enum status FtlImpl_Page::write(Event &event)
 {
 	Address address = resolve_logical_address(currentPage);
 
@@ -95,7 +93,7 @@ enum status Ftl::write(Event &event)
 	return SUCCESS;
 }
 
-inline Address Ftl::resolve_logical_address(uint logicalAddress)
+inline Address FtlImpl_Page::resolve_logical_address(uint logicalAddress)
 {
 	uint numCells = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
 
@@ -110,36 +108,5 @@ inline Address Ftl::resolve_logical_address(uint logicalAddress)
 	fprintf(stderr, "numCells: %i package: %i die: %i plane: %i block: %i page: %i\n", numCells, phyAddress.package, phyAddress.die, phyAddress.plane, phyAddress.block, phyAddress.page);
 
 	return phyAddress;
-}
-
-enum status Ftl::erase(Event &event)
-{
-	return SUCCESS;
-}
-
-enum status Ftl::merge(Event &event)
-{
-	return SUCCESS;
-}
-
-void Ftl::garbage_collect(Event &event)
-{
-	(void) garbage.collect(event);
-}
-
-ssd::ulong Ftl::get_erases_remaining(const Address &address) const
-{
-	return controller.get_erases_remaining(address);
-}
-
-void Ftl::get_least_worn(Address &address) const
-{
-	controller.get_least_worn(address);
-	return;
-}
-
-enum page_state Ftl::get_state(const Address &address) const
-{
-	return controller.get_state(address);
 }
 

@@ -61,11 +61,9 @@ bool LogPageBlock::operator() (const LogPageBlock& lhs, const LogPageBlock& rhs)
 	return lhs.numPages < rhs.numPages;
 }
 
-Ftl::Ftl(Controller &controller):
-	controller(controller),
-	manager(*this)
+FtlImpl_Bast::FtlImpl_Bast(Controller &controller):
+	FtlParent(controller)
 {
-	currentPage = 0;
 	addressShift = 0;
 	addressSize = 0;
 
@@ -83,15 +81,10 @@ Ftl::Ftl(Controller &controller):
 	// Initialise block mapping table.
 	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
 	data_list = new long[numBlocks];
-	free_list = new long[numBlocks];
-	//log_list = new LogPageBlock[numBlocks];
-	invalid_list = new long[numBlocks];
 
 	for (uint i=0;i<numBlocks;i++)
 	{
 		data_list[i] = -1;
-		free_list[i] = -1;
-		invalid_list[i] = -1;
 	}
 
 	printf("Total mapping table size: %luKB\n", numBlocks * sizeof(uint) / 1024);
@@ -99,18 +92,14 @@ Ftl::Ftl(Controller &controller):
 	return;
 }
 
-Ftl::~Ftl(void)
+FtlImpl_Bast::~FtlImpl_Bast(void)
 {
-	delete map;
-
 	delete data_list;
-	delete free_list;
-	delete invalid_list;
 
 	return;
 }
 
-enum status Ftl::read(Event &event)
+enum status FtlImpl_Bast::read(Event &event)
 {
 	// Find block
 	long lookupBlock = (event.get_logical_address() >> addressShift);
@@ -151,7 +140,7 @@ enum status Ftl::read(Event &event)
 }
 
 
-void Ftl::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
+void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
 {
 	if (log_map.size() >= PAGE_MAX_LOG)
 	{
@@ -173,13 +162,13 @@ void Ftl::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress
 	log_map[logicalBlockAddress] = logBlock;
 }
 
-void Ftl::dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress)
+void FtlImpl_Bast::dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress)
 {
 	log_map.erase(logicalBlockAddress);
 	delete logBlock;
 }
 
-bool Ftl::is_sequential(LogPageBlock* logBlock, long logicalBlockAddress, Event &event)
+bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddress, Event &event)
 {
 	// No page space. Merging required.
 	/* 1. Log block merge
@@ -202,8 +191,10 @@ bool Ftl::is_sequential(LogPageBlock* logBlock, long logicalBlockAddress, Event 
 		manager.promote_block(DATA);
 
 		// Add to empty list i.e. switch without erasing the datablock.
+		Address a;
+		a.set_linear_address(data_list[logicalBlockAddress], BLOCK);
 		if (data_list[logicalBlockAddress] != -1)
-			invalid_list[data_list[logicalBlockAddress]] = 1; // Cleaned at next run.
+			manager.invalidate(a, DATA);
 
 		data_list[logicalBlockAddress] = logBlock->address.get_linear_address();
 
@@ -217,7 +208,7 @@ bool Ftl::is_sequential(LogPageBlock* logBlock, long logicalBlockAddress, Event 
 	return isSequential;
 }
 
-bool Ftl::random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
+bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
 {
 	// Do merge (n reads, n writes and 2 erases (gc'ed))
 	/* 1. Write page to new data block
@@ -304,7 +295,7 @@ bool Ftl::random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &
 	return true;
 }
 
-enum status Ftl::write(Event &event)
+enum status FtlImpl_Bast::write(Event &event)
 {
 	long logicalBlockAddress = (event.get_logical_address() >> addressShift);
 	Address eventAddress;
@@ -331,23 +322,18 @@ enum status Ftl::write(Event &event)
 		controller.get_free_page(logBlockAddress);
 
 		event.set_address(logBlockAddress);
+	} else {
+		if (!is_sequential(logBlock, logicalBlockAddress, event))
+			random_merge(logBlock, logicalBlockAddress, event);
 
-		event.get_last_event(event);
+		allocate_new_logblock(logBlock, logicalBlockAddress, event);
 
-		return controller.issue(event);
+		// Write the current io to a new block.
+		logBlock->pages[eventAddress.page] = 0;
+		Address dataPage = logBlock->address;
+		dataPage.valid = PAGE;
+		event.set_address(dataPage);
 	}
-
-
-	if (!is_sequential(logBlock, logicalBlockAddress, event))
-		random_merge(logBlock, logicalBlockAddress, event);
-
-	allocate_new_logblock(logBlock, logicalBlockAddress, event);
-
-	// Write the current io to a new block.
-	logBlock->pages[eventAddress.page] = 0;
-	Address dataPage = logBlock->address;
-	dataPage.valid = PAGE;
-	event.set_address(dataPage);
 
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;
@@ -357,34 +343,3 @@ enum status Ftl::write(Event &event)
 	return SUCCESS;
 }
 
-
-enum status Ftl::erase(Event &event)
-{
-	return SUCCESS;
-}
-
-enum status Ftl::merge(Event &event)
-{
-	return SUCCESS;
-}
-
-ssd::ulong Ftl::get_erases_remaining(const Address &address) const
-{
-	return controller.get_erases_remaining(address);
-}
-
-void Ftl::get_least_worn(Address &address) const
-{
-	controller.get_least_worn(address);
-	return;
-}
-
-enum page_state Ftl::get_state(const Address &address) const
-{
-	return controller.get_state(address);
-}
-
-enum block_state Ftl::get_block_state(const Address &address) const
-{
-	return controller.get_block_state(address);
-}

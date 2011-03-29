@@ -133,6 +133,10 @@ void *page_data;
  */
 uint MAP_DIRECTORY_SIZE = 0;
 
+/*
+ * Implementation to use (0 -> Page, 1 -> BAST, 2 -> FAST, 3 -> DFTL, 4 -> BiModal
+ */
+uint FTL_IMPLEMENTATION = 0;
 
 
 void load_entry(char *name, double value, uint line_number)
@@ -174,17 +178,16 @@ void load_entry(char *name, double value, uint line_number)
 		PAGE_WRITE_DELAY = value;
 	else if(!strcmp(name, "PAGE_SIZE"))
 		PAGE_SIZE = value;
-	else if(strcmp(name, "PAGE_MAX_LOG"))
+	else if(!strcmp(name, "PAGE_MAX_LOG"))
 		PAGE_MAX_LOG = value;
+	else if(!strcmp(name, "FTL_IMPLEMENTATION"))
+		FTL_IMPLEMENTATION = value;
 	else if(!strcmp(name, "PAGE_ENABLE_DATA"))
-		{
-			if (value == 1)
-				PAGE_ENABLE_DATA = true;
-			else
-				PAGE_ENABLE_DATA = false;
-		}
-	else if (!strcmp(name, "MAP_DIRECTORY_SIZE"))
+		PAGE_ENABLE_DATA = (value == 1);
+	else if(!strcmp(name, "MAP_DIRECTORY_SIZE"))
 		MAP_DIRECTORY_SIZE = value;
+	else if(!strcmp(name, "FTL_IMPLEMENTATION"))
+		FTL_IMPLEMENTATION = value;
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;
@@ -254,6 +257,7 @@ void print_config(FILE *stream)
 	fprintf(stream, "PAGE_SIZE: %u\n", PAGE_SIZE);
 	fprintf(stream, "PAGE_ENABLE_DATA: %i\n", PAGE_ENABLE_DATA);
 	fprintf(stream, "MAP_DIRECTORY_SIZE: %i\n", MAP_DIRECTORY_SIZE);
+	fprintf(stream, "FTL_IMPLEMENTATION: %i\n", FTL_IMPLEMENTATION);
 	return;
 }
 
