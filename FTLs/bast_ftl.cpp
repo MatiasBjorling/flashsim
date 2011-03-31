@@ -47,6 +47,8 @@ LogPageBlock::LogPageBlock()
 
 	for (uint i=0;i<BLOCK_SIZE;i++)
 		pages[i] = -1;
+
+	next = NULL;
 }
 
 

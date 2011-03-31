@@ -138,6 +138,11 @@ uint MAP_DIRECTORY_SIZE = 0;
  */
 uint FTL_IMPLEMENTATION = 0;
 
+/*
+ * Limit of LOG pages (for use in FAST)
+ */
+uint LOG_PAGE_LIMIT = 4;
+
 
 void load_entry(char *name, double value, uint line_number)
 {
@@ -188,6 +193,8 @@ void load_entry(char *name, double value, uint line_number)
 		MAP_DIRECTORY_SIZE = value;
 	else if(!strcmp(name, "FTL_IMPLEMENTATION"))
 		FTL_IMPLEMENTATION = value;
+	else if(!strcmp(name, "LOG_PAGE_LIMIT"))
+		LOG_PAGE_LIMIT = value;
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;

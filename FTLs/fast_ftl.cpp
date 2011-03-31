@@ -1,23 +1,21 @@
-/* Copyright 2011 Matias Bjørling */
-
-/* fast_ftl.cpp  */
-
-/* FlashSim is free software: you can redistribute it and/or modify
+/* fast_ftl.cpp
+ *
+ * Copyright 2011 Matias Bjørling
+ *
+ * FlashSim is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * any later version. */
-
-/* FlashSim is distributed in the hope that it will be useful,
+ * any later version.
+ *
+ * FlashSim is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. */
-
-/* You should have received a copy of the GNU General Public License
- * along with FlashSim.  If not, see <http://www.gnu.org/licenses/>. */
-
-/****************************************************************************/
-
-/* Implementation of the FAST FTL described in the paper
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with FlashSim.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Implementation of the FAST FTL described in the paper
  * "A Log buffer-Based Flash Translation Layer Using Fully-Associative Sector Translation by Lee et. al."
  */
 
@@ -56,16 +54,35 @@ FtlImpl_Fast::FtlImpl_Fast(Controller &controller):
 	for (uint i=0;i<numBlocks;i++)
 		data_list[i] = -1;
 
+	// SW
 	sequential_offset = 0;
+	sequential_logicalblock_address = -1;
+
+	// RW
+	log_pages = new LogPageBlock;
+	log_pages->address = manager.get_free_block(LOG);
+
+	LogPageBlock *next = log_pages;
+	for (uint i=0;i<LOG_PAGE_LIMIT-1;i++)
+	{
+		LogPageBlock *newLPB = new LogPageBlock();
+		newLPB->address = manager.get_free_block(LOG);
+		next->next = newLPB;
+		next = newLPB;
+	}
+
+
+	log_page_next = 0;
 
 	printf("Total mapping table size: %luKB\n", numBlocks * sizeof(uint) / 1024);
-	printf("Using BAST FTL.\n");
+	printf("Using FAST FTL.\n");
 	return;
 }
 
 FtlImpl_Fast::~FtlImpl_Fast(void)
 {
 	delete data_list;
+	delete log_pages;
 
 	return;
 }
@@ -74,6 +91,9 @@ enum status FtlImpl_Fast::read(Event &event)
 {
 	// Find block
 	long lookupBlock = (event.get_logical_address() >> addressShift);
+
+	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
+
 	Address eventAddress;
 	eventAddress.set_linear_address(event.get_logical_address());
 
@@ -88,18 +108,26 @@ enum status FtlImpl_Fast::read(Event &event)
 		return FAILURE;
 	}
 
-	// If page is in the log block
-	if (logBlock != NULL && logBlock->pages[eventAddress.page] != -1)
-	{
-		Address returnAddress = new Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
-		event.set_address(returnAddress);
+//	// If page is in the log block
+//	if (logBlock != NULL && logBlock->pages[eventAddress.page] != -1)
+//	{
+//		Address returnAddress = new Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
+//		event.set_address(returnAddress);
+//
+//		manager.simulate_map_read(event);
+//
+//		return controller.issue(event);
 
-		manager.simulate_map_read(event);
+	if (sequential_logicalblock_address == lookupBlock && sequential_offset > lbnOffset)
+	{
+
+		Address returnAddress = Address(sequential_address.get_linear_address() + lbnOffset, PAGE);
+		event.set_address(returnAddress);
 
 		return controller.issue(event);
 	} else {
 		// If page is in the data block
-		Address returnAddress = new Address(data_list[lookupBlock]+ event.get_logical_address() % BLOCK_SIZE , PAGE);
+		Address returnAddress = Address(data_list[lookupBlock] + lbnOffset , PAGE);
 		event.set_address(returnAddress);
 
 		manager.simulate_map_read(event);
@@ -143,20 +171,14 @@ void FtlImpl_Fast::switch_sequential(long logicalBlockAddress, Event &event)
 {
 	// Add to empty list i.e. switch without erasing the datablock.
 
-	if (data_list[logicalBlockAddress] != -1)
+	if (data_list[sequential_logicalblock_address] != -1)
 	{
 		Address a;
 		a.set_linear_address(data_list[logicalBlockAddress], BLOCK);
 		manager.invalidate(a, DATA);
 	}
 
-	data_list[logicalBlockAddress] = sequential_address.get_linear_address();
-
-	sequential_offset = 0;
-	sequential_logical_address = -1;
-	sequential_address = manager.get_free_block(DATA);
-
-	manager.simulate_map_write(event);
+	data_list[sequential_logicalblock_address] = sequential_address.get_linear_address();
 
 	printf("Switch sequential\n");
 }
@@ -164,8 +186,10 @@ void FtlImpl_Fast::switch_sequential(long logicalBlockAddress, Event &event)
 void FtlImpl_Fast::merge_sequential(long logicalBlockAddress, Event &event)
 {
 
-	if (sequential_logical_address == -1)
+	if (sequential_logicalblock_address != logicalBlockAddress);
+	{
 		return; // Nothing to merge as it is the first page.
+	}
 
 	// Do merge (n reads, n writes and 2 erases (gc'ed))
 	Address eventAddress;
@@ -239,13 +263,10 @@ void FtlImpl_Fast::merge_sequential(long logicalBlockAddress, Event &event)
 	// Add erase events if necessary.
 	manager.insert_events(event);
 
-	// Add write events if necessary.
-	manager.simulate_map_write(event);
-
 	printf("Merge sequential\n");
 }
 
-bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
+bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 {
 	// Do merge (n reads, n writes and 2 erases (gc'ed))
 	/* 1. Write page to new data block
@@ -256,6 +277,8 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 	 * 5. promote new block as data block
 	 * 6. put data and log block into the invalidate list.
 	 */
+
+
 
 	Address eventAddress;
 	eventAddress.set_linear_address(event.get_logical_address());
@@ -324,9 +347,6 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 	// Add erase events if necessary.
 	manager.insert_events(event);
 
-	// Add write events if necessary.
-	manager.simulate_map_write(event);
-
 	dispose_logblock(logBlock, logicalBlockAddress);
 
 	return true;
@@ -337,13 +357,13 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
 	if (lbnOffset == 0) /* Case 1 in Figure 5 */
 	{
-		if (sequential_offset == BLOCK_SIZE -1)
+		if (sequential_offset == BLOCK_SIZE)
 		{
-			switch_sequential(logicalBlockAddress, event);
 			/* The log block is filled with sequentially written sectors
 			 * Perform switch operation
 			 * After switch, the data block is erased and returned to the free-block list
 			 */
+			switch_sequential(logicalBlockAddress, event);
 		} else {
 			/* Before merge, a new block is allocated from the free-block list
 			 * merge the SW log block with its corresponding data block
@@ -358,7 +378,7 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 		 */
 
 		sequential_address = manager.get_free_block(DATA);
-		sequential_logical_address = logicalBlockAddress;
+		sequential_logicalblock_address = logicalBlockAddress;
 		sequential_offset = 1;
 
 		Address seq = sequential_address;
@@ -366,9 +386,8 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 
 		event.set_address(seq);
 
-
 	} else {
-		if (sequential_logical_address == logicalBlockAddress) // If the current owner for the SW log block is the same with lbn
+		if (sequential_logicalblock_address == logicalBlockAddress) // If the current owner for the SW log block is the same with lbn
 		{
 			// last_lsn = getLastLsnFromSMT(lbn) Sector mapping table
 
@@ -388,22 +407,52 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 
 				sequential_offset = 1;
 				sequential_address = manager.get_free_block(DATA);
-				sequential_logical_address = logicalBlockAddress;
+				sequential_logicalblock_address = logicalBlockAddress;
 			}
 
 			// Update the SW log block part of the sector mapping table
 		} else {
-			if (1) // Thereare no rooms in the RW log lock to write data
+			if (log_page_next == LOG_PAGE_LIMIT*BLOCK_SIZE) // There are no room in the RW log lock to write data
 			{
 				/*
 				 * Select the first block of the RW log block list as a victim
 				 * merge the victim with its corresponding data block
 				 * get a block from the free block list and add it to the end of the RW log block list
 				 * update the RW log block part of the sector-mapping table
-				 *
 				 */
+
+				LogPageBlock *victim = log_pages;
+
+				random_merge(victim, logicalBlockAddress, event);
+
+				// Maintain the log page list
+				log_pages = log_pages->next;
+				manager.invalidate(victim->address, LOG);
+				delete victim;
+
+				// Create new LogPageBlock and append it to the log_pages list.
+				LogPageBlock *newLPB = new LogPageBlock();
+				newLPB->address = manager.get_free_block(LOG);
+
+				LogPageBlock *next = log_pages;
+				while (next->next != NULL) next = next->next;
+
+				next->next = newLPB;
 			}
+
 			// Append data to the RW log blocks.
+			LogPageBlock *victim = log_pages;
+			for (uint i=0;i<log_page_next / BLOCK_SIZE;i++)
+				victim = victim->next;
+
+			victim->pages[log_page_next % BLOCK_SIZE] = event.get_logical_address();
+
+			Address rw = victim->address;
+			rw.valid = PAGE;
+			rw += log_page_next % BLOCK_SIZE;
+			event.set_address(rw);
+
+			log_page_next++;
 		}
 	}
 
@@ -417,49 +466,37 @@ enum status FtlImpl_Fast::write(Event &event)
 	long logicalBlockAddress = (event.get_logical_address() >> addressShift);
 	Address eventAddress; eventAddress.set_linear_address(event.get_logical_address());
 
-	LogPageBlock *logBlock = NULL;
-
-	if (log_map.find(logicalBlockAddress) == log_map.end())
-		allocate_new_logblock(logBlock, logicalBlockAddress, event);
-
-	logBlock = log_map[logicalBlockAddress];
-
-	block_state logBlockState = controller.get_block_state(logBlock->address);
-
-	assert(logBlockState != INACTIVE);
+	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
 
 	// if a collision occurs at offset of the data block of pbn.
+	if (data_list[logicalBlockAddress] == -1)
+	{
+		Address newBlock = manager.get_free_block(DATA);
 
-	// else write data at offset in the data block of pbn.
+		// Register the mapping
+		data_list[logicalBlockAddress] = newBlock.get_linear_address();
 
-	//
+		// Store it in the right offset and save to event
+		newBlock += lbnOffset;
+		newBlock.valid = PAGE;
 
-//	// Is it a sequential stream or random
-//	if (is_next_sequential(logicalBlockAddress))
-//
-//
-//	// Can it fit inside the existing log block. Issue the request.
-//	uint numValid = controller.get_num_valid(&logBlock->address);
-//	if (numValid < BLOCK_SIZE)
-//	{
-//		logBlock->pages[eventAddress.page] = numValid;
-//
-//		Address logBlockAddress = logBlock->address;
-//		controller.get_free_page(logBlockAddress);
-//
-//		event.set_address(logBlockAddress);
-//	} else {
-////		if (!is_sequential(logBlock, logicalBlockAddress, event))
-////			random_merge(logBlock, logicalBlockAddress, event);
-//
-//		allocate_new_logblock(logBlock, logicalBlockAddress, event);
-//
-//		// Write the current io to a new block.
-//		logBlock->pages[eventAddress.page] = 0;
-//		Address dataPage = logBlock->address;
-//		dataPage.valid = PAGE;
-//		event.set_address(dataPage);
-//	}
+		event.set_address(newBlock);
+	} else {
+
+		Address dataAddress = Address(data_list[logicalBlockAddress]+lbnOffset, PAGE);
+
+		if (get_state(dataAddress) == EMPTY)
+		{
+			event.set_address(dataAddress);
+		}
+		else
+		{
+			write_to_log_block(event, logicalBlockAddress);
+		}
+	}
+
+	// Add write events if necessary.
+	manager.simulate_map_write(event);
 
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;

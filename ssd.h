@@ -124,6 +124,12 @@ extern const uint MAP_DIRECTORY_SIZE;
 extern const uint FTL_IMPLEMENTATION;
 
 /*
+ * LOG page limit for FAST.
+ */
+extern const uint LOG_PAGE_LIMIT;
+
+
+/*
  * Memory area to support pages with data.
  */
 extern void *page_data;
@@ -172,6 +178,12 @@ enum address_valid{NONE, PACKAGE, DIE, PLANE, BLOCK, PAGE};
  * the block types are log, data and map (Directory map usually)
  */
 enum block_type {LOG, DATA, LOG_SEQ};
+
+/*
+ * Enumeration of the different FTL implementations.
+ */
+enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL};
+
 
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
@@ -228,6 +240,7 @@ public:
 
 	void operator+(int);
 	void operator+(uint);
+	Address &operator+=(const uint rhs);
 	Address &operator=(const Address &rhs);
 
 	void set_linear_address(ulong address, enum address_valid valid);
@@ -245,6 +258,8 @@ public:
 	int *pages;
 	Address address;
 	int numPages;
+
+	LogPageBlock *next;
 
 	bool operator() (const ssd::LogPageBlock& lhs, const ssd::LogPageBlock& rhs) const;
 	bool operator() (const ssd::LogPageBlock*& lhs, const ssd::LogPageBlock*& rhs) const;
@@ -534,6 +549,7 @@ public:
 	void print_statistics();
 	void insert_events(Event &event);
 	void promote_block(block_type to_type);
+	bool is_log_full();
 
 	// Map directory
 	void simulate_map_write(Event &events);
@@ -644,11 +660,14 @@ private:
 
 	void switch_sequential(long logicalBlockAddress, Event &event);
 	void merge_sequential(long logicalBlockAddress, Event &event);
-	bool random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
+	bool random_merge(LogPageBlock *logBlock, Event &event);
 
-	long sequential_logical_address;
+	long sequential_logicalblock_address;
 	Address sequential_address;
 	uint sequential_offset;
+
+	uint log_page_next;
+	LogPageBlock *log_pages;
 
 	int addressShift;
 	int addressSize;

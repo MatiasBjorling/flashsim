@@ -24,7 +24,11 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 	 * requirements for map directory.
 	 */
 	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE - MAP_DIRECTORY_SIZE;
-	max_log_blocks = max_blocks;
+
+	if (FTL_IMPLEMENTATION == IMPL_FAST) // FAST
+		max_log_blocks = LOG_PAGE_LIMIT;
+	else
+		max_log_blocks = max_blocks;
 
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
 	map_offset = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
@@ -83,6 +87,14 @@ void Block_manager::promote_block(block_type to_type)
 		log_active++;
 		data_active--;
 	}
+}
+
+/*
+ * Returns true if there are no space left for additional log pages.
+ */
+bool Block_manager::is_log_full()
+{
+	return log_active == max_log_blocks;
 }
 
 

@@ -181,6 +181,12 @@ void Address::operator+(uint i)
 	set_linear_address(real_address + i);
 }
 
+Address &Address::operator+=(const uint i)
+{
+	set_linear_address(real_address + i);
+	return *this;
+}
+
 
 Address &Address::operator=(const Address &rhs)
 {
