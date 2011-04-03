@@ -88,7 +88,6 @@ enum status Page::_write(Event &event)
 	assert(write_delay >= 0.0);
 	assert(state == EMPTY);
 
-
 	event.incr_time_taken(write_delay);
 	state = VALID;
 	if (PAGE_ENABLE_DATA && event.get_payload() != NULL)

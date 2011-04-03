@@ -44,9 +44,15 @@ using namespace ssd;
 LogPageBlock::LogPageBlock()
 {
 	pages = new int[BLOCK_SIZE];
+	aPages = new ulong[BLOCK_SIZE];
 
 	for (uint i=0;i<BLOCK_SIZE;i++)
+	{
 		pages[i] = -1;
+		aPages[i] = -1;
+	}
+
+	numPages = 0;
 
 	next = NULL;
 }
@@ -55,6 +61,7 @@ LogPageBlock::LogPageBlock()
 LogPageBlock::~LogPageBlock()
 {
 	delete [] pages;
+	delete [] aPages;
 }
 
 /* Comparison class for use by FTL to sort the LogPageBlock compared to the number of pages written. */

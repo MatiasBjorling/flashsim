@@ -256,6 +256,7 @@ public:
 	~LogPageBlock(void);
 
 	int *pages;
+	ulong *aPages;
 	Address address;
 	int numPages;
 
@@ -658,7 +659,7 @@ private:
 
 	bool write_to_log_block(Event &event, long logicalBlockAddress);
 
-	void switch_sequential(long logicalBlockAddress, Event &event);
+	void switch_sequential(Event &event);
 	void merge_sequential(long logicalBlockAddress, Event &event);
 	bool random_merge(LogPageBlock *logBlock, Event &event);
 
