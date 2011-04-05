@@ -660,7 +660,7 @@ private:
 	bool write_to_log_block(Event &event, long logicalBlockAddress);
 
 	void switch_sequential(Event &event);
-	void merge_sequential(long logicalBlockAddress, Event &event);
+	void merge_sequential(Event &event);
 	bool random_merge(LogPageBlock *logBlock, Event &event);
 
 	long sequential_logicalblock_address;

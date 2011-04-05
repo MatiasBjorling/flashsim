@@ -85,6 +85,8 @@ enum status Page::_read(Event &event)
 
 enum status Page::_write(Event &event)
 {
+	if (event.get_address().get_linear_address() == 1020)
+		printf("woohoo\n");
 	assert(write_delay >= 0.0);
 	assert(state == EMPTY);
 
