@@ -132,6 +132,13 @@ enum status Plane::write(Event &event)
 	return s;
 }
 
+enum status Plane::replace(Event &event)
+{
+	assert(event.get_address().block < size && event.get_address().valid > PLANE);
+	return data[event.get_address().block].replace(event);
+}
+
+
 /* if no errors
  * 	updates last_erase_time if later time
  * 	updates erases_remaining if smaller value

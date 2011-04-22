@@ -99,6 +99,13 @@ enum status Die::write(Event &event)
 	return data[event.get_address().plane].write(event);
 }
 
+enum status Die::replace(Event &event)
+{
+	assert(data != NULL);
+	assert(event.get_address().plane < size && event.get_address().valid > DIE);
+	return data[event.get_address().plane].replace(event);
+}
+
 /* if no errors
  * 	updates last_erase_time if later time
  * 	updates erases_remaining if smaller value

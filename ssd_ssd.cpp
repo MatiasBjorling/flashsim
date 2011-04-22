@@ -247,6 +247,12 @@ enum status Ssd::write(Event &event)
 	return data[event.get_address().package].write(event);
 }
 
+enum status Ssd::replace(Event &event)
+{
+	assert(data != NULL && event.get_address().package < size && event.get_address().valid >= PACKAGE);
+	return data[event.get_address().package].replace(event);
+}
+
 
 enum status Ssd::erase(Event &event)
 {

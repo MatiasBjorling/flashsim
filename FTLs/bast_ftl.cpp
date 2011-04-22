@@ -156,18 +156,16 @@ void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlo
 		long exLogicalBlock = (*log_map.begin()).first;
 		LogPageBlock *exLogBlock = (*log_map.begin()).second;
 
-		printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
+		//printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
 
 		if (!is_sequential(exLogBlock, exLogicalBlock, event))
 			random_merge(exLogBlock, exLogicalBlock, event);
-
-
 	}
 
 	logBlock = new LogPageBlock();
 	logBlock->address = manager.get_free_block(LOG);
 
-	printf("Using new log block with address: %lu Block: %u at logical address: %li\n", logBlock->address.get_linear_address(), logBlock->address.block, logicalBlockAddress);
+	//printf("Using new log block with address: %lu Block: %u at logical address: %li\n", logBlock->address.get_linear_address(), logBlock->address.block, logicalBlockAddress);
 	log_map[logicalBlockAddress] = logBlock;
 }
 
@@ -211,7 +209,7 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddres
 
 		manager.simulate_map_write(event);
 
-		printf("Wrote sequential\n");
+		//printf("Wrote sequential\n");
 	}
 
 	return isSequential;

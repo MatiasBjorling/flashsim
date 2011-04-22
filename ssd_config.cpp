@@ -143,6 +143,13 @@ uint FTL_IMPLEMENTATION = 0;
  */
 uint LOG_PAGE_LIMIT = 4;
 
+/*
+ * Number of pages allowed to be in DFTL Cached Mapping Table.
+ * (Size equals CACHE_BLOCK_LIMIT * block size * page size)
+ *
+ */
+uint CACHE_DFTL_LIMIT = 8;
+
 
 void load_entry(char *name, double value, uint line_number)
 {
@@ -195,6 +202,8 @@ void load_entry(char *name, double value, uint line_number)
 		FTL_IMPLEMENTATION = value;
 	else if(!strcmp(name, "LOG_PAGE_LIMIT"))
 		LOG_PAGE_LIMIT = value;
+	else if(!strcmp(name, "CACHE_DFTL_LIMIT"))
+		CACHE_DFTL_LIMIT = value;
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;

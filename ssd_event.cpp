@@ -101,6 +101,11 @@ const Address &Event::get_log_address(void) const
 	return log_address;
 }
 
+const Address &Event::get_replace_address(void) const
+{
+	return replace_address;
+}
+
 void Event::set_log_address(const Address &address)
 {
 	log_address = address;
@@ -164,6 +169,11 @@ void Event::set_merge_address(const Address &address)
 {
 	merge_address = address;
 	return;
+}
+
+void Event::set_replace_address(const Address &address)
+{
+	replace_address = address;
 }
 
 void Event::set_next(Event &next)

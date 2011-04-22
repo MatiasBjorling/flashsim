@@ -128,6 +128,10 @@ extern const uint FTL_IMPLEMENTATION;
  */
 extern const uint LOG_PAGE_LIMIT;
 
+/*
+ * Number of blocks allowed to be in DFTL Cached Mapping Table.
+ */
+extern const uint CACHE_DFTL_LIMIT;
 
 /*
  * Memory area to support pages with data.
@@ -280,6 +284,7 @@ public:
 	const Address &get_address(void) const;
 	const Address &get_merge_address(void) const;
 	const Address &get_log_address(void) const;
+	const Address &get_replace_address(void) const;
 	uint get_size(void) const;
 	enum event_type get_event_type(void) const;
 	double get_start_time(void) const;
@@ -289,6 +294,7 @@ public:
 	void set_address(const Address &address);
 	void set_merge_address(const Address &address);
 	void set_log_address(const Address &address);
+	void set_replace_address(const Address &address);
 	void set_next(Event &next);
 	void set_payload(void *payload);
 	void set_event_type(const enum event_type &type);
@@ -306,6 +312,7 @@ private:
 	Address address;
 	Address merge_address;
 	Address log_address;
+	Address replace_address;
 	uint size;
 	void *payload;
 	Event *next;
@@ -393,6 +400,7 @@ public:
 	~Block(void);
 	enum status read(Event &event);
 	enum status write(Event &event);
+	enum status replace(Event &event);
 	enum status _erase(Event &event);
 	const Plane &get_parent(void) const;
 	uint get_pages_valid(void) const;
@@ -428,6 +436,7 @@ public:
 	enum status read(Event &event);
 	enum status write(Event &event);
 	enum status erase(Event &event);
+	enum status replace(Event &event);
 	enum status _merge(Event &event);
 	const Die &get_parent(void) const;
 	double get_last_erase_time(const Address &address) const;
@@ -464,6 +473,7 @@ public:
 	enum status read(Event &event);
 	enum status write(Event &event);
 	enum status erase(Event &event);
+	enum status replace(Event &event);
 	enum status merge(Event &event);
 	enum status _merge(Event &event);
 	const Package &get_parent(void) const;
@@ -498,6 +508,7 @@ public:
 	enum status read(Event &event);
 	enum status write(Event &event);
 	enum status erase(Event &event);
+	enum status replace(Event &event);
 	enum status merge(Event &event);
 	const Ssd &get_parent(void);
 	double get_last_erase_time (const Address &address) const;
@@ -556,7 +567,7 @@ public:
 	void simulate_map_write(Event &events);
 	void simulate_map_read(Event &events);
 private:
-	void get_page(Address &address);
+	void get_page_block(Address &address);
 
 	FtlParent &ftl;
 
@@ -674,6 +685,46 @@ private:
 	int addressSize;
 };
 
+class FtlImpl_Dftl : public FtlParent
+{
+public:
+	FtlImpl_Dftl(Controller &controller);
+	~FtlImpl_Dftl();
+	enum status read(Event &event);
+	enum status write(Event &event);
+private:
+
+	struct MPage {
+		long vpn;
+		long ppn;
+		double create_ts;
+		double modified_ts;
+
+		MPage(long vpn, long ppn, double create_ts);
+		MPage();
+	};
+
+	std::map<long, MPage*> cmt;
+	MPage *trans_map;
+
+	long select_victim_entry();
+	MPage &consult_GTD(long dppn, Event &event);
+
+	bool lookup_CMT(long dlpn, FtlImpl_Dftl::MPage &mpage);
+
+	long get_free_translation_page();
+	long get_free_data_page();
+
+
+	// Mapping information
+	int addressPerPage;
+	int addressSize;
+
+	// Current storage
+	long currentDataPage;
+	long currentTranslationPage;
+};
+
 
 /* This is a basic implementation that only provides delay updates to events
  * based on a delay value multiplied by the size (number of pages) needed to
@@ -708,6 +759,7 @@ public:
 	friend class FtlImpl_Page;
 	friend class FtlImpl_Bast;
 	friend class FtlImpl_Fast;
+	friend class FtlImpl_Dftl;
 private:
 	enum status issue(Event &event_list);
 	ssd::ulong get_erases_remaining(const Address &address) const;
@@ -739,6 +791,7 @@ private:
 	enum status write(Event &event);
 	enum status erase(Event &event);
 	enum status merge(Event &event);
+	enum status replace(Event &event);
 	enum status merge_replacement_block(Event &event);
 	ulong get_erases_remaining(const Address &address) const;
 	void update_wear_stats(const Address &address);

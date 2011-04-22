@@ -148,7 +148,7 @@ void FtlImpl_Fast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlo
 		long exLogicalBlock = (*log_map.begin()).first;
 		LogPageBlock *exLogBlock = (*log_map.begin()).second;
 
-		printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
+		//printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
 
 //		if (!is_sequential(exLogBlock, exLogicalBlock, event))
 //			random_merge(exLogBlock, exLogicalBlock, event);
@@ -157,7 +157,7 @@ void FtlImpl_Fast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlo
 	logBlock = new LogPageBlock();
 	logBlock->address = manager.get_free_block(LOG);
 
-	printf("Using new log block with address: %lu Block: %u at logical address: %li\n", logBlock->address.get_linear_address(), logBlock->address.block, logicalBlockAddress);
+	//printf("Using new log block with address: %lu Block: %u at logical address: %li\n", logBlock->address.get_linear_address(), logBlock->address.block, logicalBlockAddress);
 	log_map[logicalBlockAddress] = logBlock;
 }
 
@@ -193,7 +193,7 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 	eventAddress.set_linear_address(event.get_logical_address());
 
 	Address newDataBlock = manager.get_free_block(DATA);
-	printf("Using new data block with address: %lu Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
+	//printf("Using new data block with address: %lu Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
 
 	Event *eventOps = event.get_last_event(event);
 	Event *newEvent = NULL;

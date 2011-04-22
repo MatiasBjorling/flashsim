@@ -105,6 +105,12 @@ enum status Block::write(Event &event)
 	return ret;
 }
 
+enum status Block::replace(Event &event)
+{
+	invalidate_page(event.get_replace_address().page);
+	return SUCCESS;
+}
+
 /* updates Event time_taken
  * sets Page statuses to EMPTY
  * updates last_erase_time and erases_remaining

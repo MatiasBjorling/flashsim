@@ -31,7 +31,7 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 		max_log_blocks = max_blocks;
 
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
-	map_offset = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
+	map_offset = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE*BLOCK_SIZE-max_map_pages;
 
 	map_space_capacity = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE / (SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE * 32 / 8 / PAGE_SIZE);
 
@@ -50,9 +50,9 @@ Block_manager::~Block_manager(void)
  * pages have been written or the complex that retrieves
  * it from a free page list.
  */
-void Block_manager::get_page(Address &address)
+void Block_manager::get_page_block(Address &address)
 {
-	if (simpleCurrentFree < max_blocks)
+	if ((simpleCurrentFree/BLOCK_SIZE) < max_blocks)
 	{
 		address.set_linear_address(simpleCurrentFree, BLOCK);
 		simpleCurrentFree += BLOCK_SIZE;
@@ -105,7 +105,7 @@ void Block_manager::print_statistics()
 	printf("-----------------\n");
 	printf("Log blocks:  %lu\n", log_active);
 	printf("Data blocks: %lu\n", data_active);
-	printf("Free blocks: %lu\n", (max_blocks - simpleCurrentFree) / BLOCK_SIZE + free_list.size());
+	printf("Free blocks: %lu\n", (max_blocks - (simpleCurrentFree/BLOCK_SIZE)) + free_list.size());
 	printf("Invalid blocks: %lu\n", invalid_list.size());
 	printf("-----------------\n");
 }
@@ -157,14 +157,14 @@ Address Block_manager::get_free_block(block_type type)
 	switch (type)
 	{
 	case DATA:
-		get_page(address);
+		get_page_block(address);
 		data_active++;
 		break;
 	case LOG:
 		if (log_active == max_log_blocks)
 			throw std::bad_alloc();
 
-		get_page(address);
+		get_page_block(address);
 		log_active++;
 		break;
 	}
