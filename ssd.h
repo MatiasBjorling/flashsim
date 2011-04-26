@@ -290,6 +290,7 @@ public:
 	double get_start_time(void) const;
 	double get_time_taken(void) const;
 	double get_bus_wait_time(void) const;
+	bool get_noop(void) const;
 	Event *get_next(void) const;
 	void set_address(const Address &address);
 	void set_merge_address(const Address &address);
@@ -298,6 +299,7 @@ public:
 	void set_next(Event &next);
 	void set_payload(void *payload);
 	void set_event_type(const enum event_type &type);
+	void set_noop(bool value);
 	void *get_payload(void) const;
 	double incr_bus_wait_time(double time);
 	double incr_time_taken(double time_incr);
@@ -308,6 +310,7 @@ private:
 	double time_taken;
 	double bus_wait_time;
 	enum event_type type;
+	bool noop;
 	ulong logical_address;
 	Address address;
 	Address merge_address;
@@ -448,6 +451,7 @@ public:
 	void get_free_page(Address &address) const;
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
+	ssd::uint get_num_invalid(const Address &address) const;
 private:
 	void update_wear_stats(void);
 	enum status get_next_page(void);
@@ -485,6 +489,7 @@ public:
 	void get_free_page(Address &address) const;
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
+	ssd::uint get_num_invalid(const Address &address) const;
 private:
 	void update_wear_stats(const Address &address);
 	uint size;
@@ -519,6 +524,7 @@ public:
 	void get_free_page(Address &address) const;
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
+	ssd::uint get_num_invalid(const Address &address) const;
 private:
 	void update_wear_stats (const Address &address);
 	uint size;
@@ -707,8 +713,9 @@ private:
 	std::map<long, MPage*> cmt;
 	MPage *trans_map;
 
-	long select_victim_entry();
+	MPage &select_victim_entry();
 	MPage &consult_GTD(long dppn, Event &event);
+	void reset_MPage(FtlImpl_Dftl::MPage &mpage);
 
 	bool lookup_CMT(long dlpn, FtlImpl_Dftl::MPage &mpage);
 
@@ -719,6 +726,7 @@ private:
 	// Mapping information
 	int addressPerPage;
 	int addressSize;
+	uint totalCMTentries;
 
 	// Current storage
 	long currentDataPage;
@@ -770,6 +778,7 @@ private:
 	void get_free_page(Address &address) const;
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
+	ssd::uint get_num_invalid(const Address &address) const;
 	Ssd &ssd;
 	FtlParent *ftl;
 };
@@ -803,6 +812,7 @@ private:
 	void get_free_page(Address &address) const;
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
+	ssd::uint get_num_invalid(const Address &address) const;
 	uint size;
 	Controller controller;
 	Ram ram;

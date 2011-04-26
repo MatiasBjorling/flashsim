@@ -142,6 +142,10 @@ ssd::ulong Package::get_erases_remaining(const Address &address) const
 		return erases_remaining;
 }
 
+ssd::uint ssd::Package::get_num_invalid(const Address & address) const
+{
+}
+
 /* Plane with the most erases remaining is the least worn */
 void Package::update_wear_stats(const Address &address)
 {

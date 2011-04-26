@@ -170,6 +170,8 @@ ssd::ulong Die::get_erases_remaining(const Address &address) const
 		return erases_remaining;
 }
 
+
+
 /* Plane with the most erases remaining is the least worn */
 void Die::update_wear_stats(const Address &address)
 {
@@ -226,3 +228,9 @@ ssd::uint Die::get_num_valid(const Address &address) const
 	assert(address.valid >= PLANE);
 	return data[address.plane].get_num_valid(address);
 }   
+
+ssd::uint ssd::Die::get_num_invalid(const Address & address) const
+{
+	assert(address.valid >= PLANE);
+	return data[address.plane].get_num_invalid(address);
+}

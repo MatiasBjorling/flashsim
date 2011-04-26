@@ -388,3 +388,9 @@ ssd::uint Plane::get_num_valid(const Address &address) const
 	assert(address.valid >= PLANE);
 	return data[address.block].get_pages_valid();
 }
+
+ssd::uint ssd::Plane::get_num_invalid(const Address & address) const
+{
+	assert(address.valid >= PLANE);
+	return data[address.block].get_pages_invalid();
+}

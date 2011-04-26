@@ -353,3 +353,9 @@ ssd::uint Ssd::get_num_valid(const Address &address) const
 	return data[address.package].get_num_valid(address);
 }
 
+ssd::uint Ssd::get_num_invalid(const Address &address) const
+{
+	assert(address.valid >= PACKAGE);
+	return data[address.package].get_num_invalid(address);
+}
+

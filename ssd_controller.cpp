@@ -179,3 +179,10 @@ ssd::uint Controller::get_num_valid(const Address &address) const
 	assert(address.valid > NONE);
 	return ssd.get_num_valid(address);
 }
+
+ssd::uint Controller::get_num_invalid(const Address &address) const
+{
+	assert(address.valid > NONE);
+	return ssd.get_num_invalid(address);
+}
+

@@ -30,7 +30,6 @@
 
 using namespace ssd;
 
-
 FtlImpl_Fast::FtlImpl_Fast(Controller &controller):
 	FtlParent(controller)
 {

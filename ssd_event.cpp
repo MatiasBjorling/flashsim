@@ -144,6 +144,11 @@ double Event::get_bus_wait_time(void) const
 	return bus_wait_time;
 }
 
+bool Event::get_noop(void) const
+{
+	return noop;
+}
+
 Event *Event::get_next(void) const
 {
 	return next;
@@ -174,6 +179,11 @@ void Event::set_merge_address(const Address &address)
 void Event::set_replace_address(const Address &address)
 {
 	replace_address = address;
+}
+
+void Event::set_noop(bool value)
+{
+	noop = value;
 }
 
 void Event::set_next(Event &next)

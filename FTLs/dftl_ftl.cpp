@@ -52,6 +52,8 @@ FtlImpl_Dftl::MPage::MPage()
 {
 	this->vpn = 0;
 	this->ppn = -1;
+	this->create_ts = -1;
+	this->modified_ts = -1;
 }
 
 
@@ -75,8 +77,8 @@ FtlImpl_Dftl::FtlImpl_Dftl(Controller &controller):
 
 	printf("Total required bits for representation: Address size: %i Total per page: %i \n", addressSize, addressPerPage);
 
-	int totalCMTSize = CACHE_DFTL_LIMIT * addressPerPage;
-	printf("Number of elements in Cached Mapping Table (CMT): %i\n", totalCMTSize);
+	totalCMTentries = CACHE_DFTL_LIMIT * addressPerPage;
+	printf("Number of elements in Cached Mapping Table (CMT): %i\n", totalCMTentries);
 
 	// Initialise block mapping table.
 	uint ssdSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
@@ -89,9 +91,20 @@ FtlImpl_Dftl::FtlImpl_Dftl(Controller &controller):
 }
 
 
-long FtlImpl_Dftl::select_victim_entry()
+FtlImpl_Dftl::MPage &FtlImpl_Dftl::select_victim_entry()
 {
+	MPage evictPage;
 
+	std::map<long, MPage*>::iterator i = cmt.begin();
+	while (i != cmt.end())
+	{
+		MPage *tmpMPage = (*i).second;
+		if (evictPage.modified_ts > tmpMPage->modified_ts)
+			evictPage = *tmpMPage;
+		++i;
+	}
+
+	return evictPage;
 }
 
 FtlImpl_Dftl::MPage &FtlImpl_Dftl::consult_GTD(long dlpn, Event &event)
@@ -107,19 +120,25 @@ FtlImpl_Dftl::MPage &FtlImpl_Dftl::consult_GTD(long dlpn, Event &event)
 		trans_map[dlpn].create_ts = event.get_start_time();
 		trans_map[dlpn].modified_ts = event.get_start_time();
 	}
-	else
-	{
-		mpage = &trans_map[dlpn];
-	}
+
+	mpage = &trans_map[dlpn];
 
 	// Simulate that we goto translation map and read the mapping page.
 	Event *readEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time());
 	readEvent->set_address(Address(mpage->ppn, PAGE));
+	readEvent->set_noop(true);
 
 	Event *lastEvent = event.get_last_event(event);
 	lastEvent->set_next(*readEvent);
 
 	return *mpage;
+}
+
+void FtlImpl_Dftl::reset_MPage(FtlImpl_Dftl::MPage &mpage)
+{
+	mpage.create_ts = -1;
+	mpage.modified_ts = -1;
+	mpage.ppn = -1;
 }
 
 bool FtlImpl_Dftl::lookup_CMT(long dlpn, FtlImpl_Dftl::MPage &mpage)
@@ -168,6 +187,7 @@ enum status FtlImpl_Dftl::read(Event &event)
 
 enum status FtlImpl_Dftl::write(Event &event)
 {
+	printf("write IO: %u\n", event.get_logical_address());
 	/* 1. Lookup in CMT if the mapping exist
 	 * 2. If, then serve
 	 * 3. If not, then goto GDT, lookup page
@@ -177,15 +197,53 @@ enum status FtlImpl_Dftl::write(Event &event)
 	 */
 
 	MPage mapping;
-	if (lookup_CMT(event.get_address().get_linear_address(),mapping))
+	if (lookup_CMT(event.get_logical_address(),mapping))
 	{
 		mapping.modified_ts = event.get_start_time();
+
+		// Inform the ssd model that it should invalidate the previous page.
 		Address killAddress = Address(mapping.ppn, PAGE);
-
+		event.set_replace_address(killAddress);
 	} else {
+		mapping = consult_GTD(event.get_logical_address(), event);
 
+		if (cmt.size() >= 100 /* totalCMTentries */)
+		{
+			// Find page to evict
+			MPage evictPage = select_victim_entry();
+
+//			if (evictPage->create_ts != evictPage->modified_ts)
+//			{
+//				// Evict page
+//				// Inform the ssd model that it should invalidate the previous page.
+//				Address killAddress = Address(evictPage->ppn, PAGE);
+//				event.set_replace_address(killAddress);
+//
+//				evictPage->ppn = get_free_data_page();
+//			}
+
+			// Remove page from cache.
+			reset_MPage(evictPage);
+			cmt.erase(evictPage.vpn);
+
+			printf("Erased vpn: %li\n", evictPage.vpn);
+		}
+
+		cmt[mapping.vpn] = &mapping;
+		printf("Writing vpn: %li\n", mapping.vpn);
 	}
 
+	printf("Size of cmt: %i\n", cmt.size());
+
+	// Get next available data page
+	mapping.ppn = get_free_data_page();
+
+	event.set_address(Address(mapping.ppn, PAGE));
+
+	if (controller.issue(event) == FAILURE)
+		return FAILURE;
+
+	event.consolidate_metaevent(event);
 
 	return SUCCESS;
 }
