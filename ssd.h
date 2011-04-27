@@ -750,7 +750,6 @@ private:
 		double create_ts;
 		double modified_ts;
 
-		MPage(long vpn, long ppn, double create_ts);
 		MPage();
 	};
 
@@ -758,11 +757,57 @@ private:
 	MPage *trans_map;
 
 	void select_victim_entry(FtlImpl_Dftl::MPage &mpage);
-	void consult_GTD(long dppn, Event &event, FtlImpl_Dftl::MPage &mpage);
+	void consult_GTD(long dppn, Event &event);
 	void reset_MPage(FtlImpl_Dftl::MPage &mpage);
 	void remove_victims(FtlImpl_Dftl::MPage &mpage);
 
-	bool lookup_CMT(long dlpn, Event &event, FtlImpl_Dftl::MPage &mpage);
+	void resolve_mapping(Event &event, bool isWrite);
+
+	bool lookup_CMT(long dlpn, Event &event);
+
+	long get_free_translation_page();
+	long get_free_data_page();
+
+
+	// Mapping information
+	int addressPerPage;
+	int addressSize;
+	uint totalCMTentries;
+
+	// Current storage
+	long currentDataPage;
+	long currentTranslationPage;
+};
+
+class FtlImpl_BDftl : public FtlParent
+{
+public:
+	FtlImpl_BDftl(Controller &controller);
+	~FtlImpl_BDftl();
+	enum status read(Event &event);
+	enum status write(Event &event);
+private:
+
+	struct MPage {
+		long vpn;
+		long ppn;
+		double create_ts;
+		double modified_ts;
+
+		MPage();
+	};
+
+	std::map<long, bool> cmt;
+	MPage *trans_map;
+
+	void select_victim_entry(FtlImpl_BDftl::MPage &mpage);
+	void consult_GTD(long dppn, Event &event);
+	void reset_MPage(FtlImpl_BDftl::MPage &mpage);
+	void remove_victims(FtlImpl_BDftl::MPage &mpage);
+
+	void resolve_mapping(Event &event, bool isWrite);
+
+	bool lookup_CMT(long dlpn, Event &event);
 
 	long get_free_translation_page();
 	long get_free_data_page();
@@ -813,6 +858,7 @@ public:
 	friend class FtlImpl_Bast;
 	friend class FtlImpl_Fast;
 	friend class FtlImpl_Dftl;
+	friend class FtlImpl_BDftl;
 	Stats stats;
 private:
 	enum status issue(Event &event_list);

@@ -76,8 +76,8 @@ enum status Page::_read(Event &event)
 		if (PAGE_ENABLE_DATA )
 				global_buffer = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
 
-			if (state == EMPTY)
-				fprintf(stderr, "Reading from empty page.\n");
+		if (state == EMPTY)
+			fprintf(stderr, "Reading from empty page.\n");
 
 	}
 

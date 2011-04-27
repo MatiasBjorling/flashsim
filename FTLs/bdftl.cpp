@@ -1,6 +1,6 @@
 /* Copyright 2011 Matias Bjørling */
 
-/* dftp_ftl.cpp  */
+/* bdftp_ftl.cpp  */
 
 /* FlashSim is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,7 @@
 
 /****************************************************************************/
 
-/* Implementation of the DFTL described in the paper
- * "DFTL: A Flasg Translation Layer Employing Demand-based Selective Caching og Page-level Address Mappings"
+/* Implementation of BDFTL. A block-level optimization for DFTL.
  *
  * Global Mapping Table GMT
  * Global Translation Directory GTD (Maintained in memory)
@@ -40,7 +39,7 @@
 
 using namespace ssd;
 
-FtlImpl_Dftl::MPage::MPage()
+FtlImpl_BDftl::MPage::MPage()
 {
 	this->vpn = -1;
 	this->ppn = -1;
@@ -49,7 +48,7 @@ FtlImpl_Dftl::MPage::MPage()
 }
 
 
-FtlImpl_Dftl::FtlImpl_Dftl(Controller &controller):
+FtlImpl_BDftl::FtlImpl_BDftl(Controller &controller):
 	FtlParent(controller)
 {
 	// Trivial assumption checks
@@ -83,7 +82,7 @@ FtlImpl_Dftl::FtlImpl_Dftl(Controller &controller):
 }
 
 
-void FtlImpl_Dftl::select_victim_entry(FtlImpl_Dftl::MPage &mpage)
+void FtlImpl_BDftl::select_victim_entry(FtlImpl_BDftl::MPage &mpage)
 {
 	double evictPageTime = trans_map[cmt.begin()->first].modified_ts;
 	long evictPage = cmt.begin()->first;
@@ -100,12 +99,12 @@ void FtlImpl_Dftl::select_victim_entry(FtlImpl_Dftl::MPage &mpage)
 	mpage = trans_map[evictPage];
 }
 
-void FtlImpl_Dftl::remove_victims(FtlImpl_Dftl::MPage &mpage)
+void FtlImpl_BDftl::remove_victims(FtlImpl_BDftl::MPage &mpage)
 {
 
 }
 
-void FtlImpl_Dftl::consult_GTD(long dlpn, Event &event)
+void FtlImpl_BDftl::consult_GTD(long dlpn, Event &event)
 {
 	// TODO: Add translation page counter
 
@@ -124,14 +123,14 @@ void FtlImpl_Dftl::consult_GTD(long dlpn, Event &event)
 	controller.stats.numFTLRead++;
 }
 
-void FtlImpl_Dftl::reset_MPage(FtlImpl_Dftl::MPage &mpage)
+void FtlImpl_BDftl::reset_MPage(FtlImpl_BDftl::MPage &mpage)
 {
 	mpage.create_ts = -1;
 	mpage.modified_ts = -1;
 	mpage.ppn = -1;
 }
 
-bool FtlImpl_Dftl::lookup_CMT(long dlpn, Event &event)
+bool FtlImpl_BDftl::lookup_CMT(long dlpn, Event &event)
 {
 	if (cmt.find(dlpn) == cmt.end())
 		return false;
@@ -142,7 +141,7 @@ bool FtlImpl_Dftl::lookup_CMT(long dlpn, Event &event)
 	return true;
 }
 
-long FtlImpl_Dftl::get_free_translation_page()
+long FtlImpl_BDftl::get_free_translation_page()
 {
 	if (currentTranslationPage == -1 || currentTranslationPage % BLOCK_SIZE == BLOCK_SIZE -1)
 		currentTranslationPage = manager.get_free_block(LOG).get_linear_address();
@@ -152,7 +151,7 @@ long FtlImpl_Dftl::get_free_translation_page()
 	return currentTranslationPage;
 }
 
-long FtlImpl_Dftl::get_free_data_page()
+long FtlImpl_BDftl::get_free_data_page()
 {
 	if (currentDataPage == -1 || currentDataPage % BLOCK_SIZE == BLOCK_SIZE -1)
 		currentDataPage = manager.get_free_block(DATA).get_linear_address();
@@ -162,14 +161,14 @@ long FtlImpl_Dftl::get_free_data_page()
 	return currentDataPage;
 }
 
-FtlImpl_Dftl::~FtlImpl_Dftl(void)
+FtlImpl_BDftl::~FtlImpl_BDftl(void)
 {
 	delete trans_map;
 
 	return;
 }
 
-void FtlImpl_Dftl::resolve_mapping(Event &event, bool isWrite)
+void FtlImpl_BDftl::resolve_mapping(Event &event, bool isWrite)
 {
 	uint dlpn = event.get_logical_address();
 	/* 1. Lookup in CMT if the mapping exist
@@ -223,7 +222,7 @@ void FtlImpl_Dftl::resolve_mapping(Event &event, bool isWrite)
 	}
 }
 
-enum status FtlImpl_Dftl::read(Event &event)
+enum status FtlImpl_BDftl::read(Event &event)
 {
 	uint dlpn = event.get_logical_address();
 
@@ -242,7 +241,7 @@ enum status FtlImpl_Dftl::read(Event &event)
 }
 
 
-enum status FtlImpl_Dftl::write(Event &event)
+enum status FtlImpl_BDftl::write(Event &event)
 {
 	uint dlpn = event.get_logical_address();
 

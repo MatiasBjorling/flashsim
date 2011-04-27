@@ -55,6 +55,9 @@ Controller::Controller(Ssd &parent):
 	case 3:
 		ftl = new FtlImpl_Dftl(*this);
 		break;
+	case 4:
+		ftl = new FtlImpl_BDftl(*this);
+		break;
 	}
 	return;
 }

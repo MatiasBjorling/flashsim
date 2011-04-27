@@ -97,7 +97,6 @@ bool Block_manager::is_log_full()
 	return log_active == max_log_blocks;
 }
 
-
 void Block_manager::print_statistics()
 {
 	printf("-----------------\n");
@@ -123,6 +122,8 @@ void Block_manager::invalidate(Address &address, block_type type)
 		break;
 	}
 }
+
+
 
 /*
  * Insert erase events into the event stream.
