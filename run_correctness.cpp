@@ -21,7 +21,9 @@ double do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 	double result = 0;
 	for (adr = 0; adr < file_size;adr += PAGE_SIZE)
 	{
-		result += ssd->event_arrive(type, i, 1, (double) adr, (char*)test + adr);
+		double iotime = ssd->event_arrive(type, i, 1, (double) adr, (char*)test + adr);
+		printf("IO Execution time: %f\n", iotime);
+		result += iotime;
 		if (type == READ)
 		{
 			if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)

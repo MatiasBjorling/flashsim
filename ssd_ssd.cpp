@@ -227,7 +227,6 @@ double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size,
  */
 void *Ssd::get_result_buffer()
 {
-
 	return global_buffer;
 }
 

@@ -735,15 +735,14 @@ private:
 	int addressSize;
 };
 
-class FtlImpl_Dftl : public FtlParent
+class FtlImpl_DftlParent : public FtlParent
 {
 public:
-	FtlImpl_Dftl(Controller &controller);
-	~FtlImpl_Dftl();
-	enum status read(Event &event);
-	enum status write(Event &event);
-private:
-
+	FtlImpl_DftlParent(Controller &controller);
+	~FtlImpl_DftlParent();
+	virtual enum status read(Event &event) = 0;
+	virtual enum status write(Event &event) = 0;
+protected:
 	struct MPage {
 		long vpn;
 		long ppn;
@@ -756,10 +755,10 @@ private:
 	std::map<long, bool> cmt;
 	MPage *trans_map;
 
-	void select_victim_entry(FtlImpl_Dftl::MPage &mpage);
+	void select_victim_entry(FtlImpl_DftlParent::MPage &mpage);
 	void consult_GTD(long dppn, Event &event);
-	void reset_MPage(FtlImpl_Dftl::MPage &mpage);
-	void remove_victims(FtlImpl_Dftl::MPage &mpage);
+	void reset_MPage(FtlImpl_DftlParent::MPage &mpage);
+	void remove_victims(FtlImpl_DftlParent::MPage &mpage);
 
 	void resolve_mapping(Event &event, bool isWrite);
 
@@ -779,7 +778,16 @@ private:
 	long currentTranslationPage;
 };
 
-class FtlImpl_BDftl : public FtlParent
+class FtlImpl_Dftl : public FtlImpl_DftlParent
+{
+public:
+	FtlImpl_Dftl(Controller &controller);
+	~FtlImpl_Dftl();
+	enum status read(Event &event);
+	enum status write(Event &event);
+};
+
+class FtlImpl_BDftl : public FtlImpl_DftlParent
 {
 public:
 	FtlImpl_BDftl(Controller &controller);
@@ -788,14 +796,6 @@ public:
 	enum status write(Event &event);
 private:
 
-	struct MPage {
-		long vpn;
-		long ppn;
-		double create_ts;
-		double modified_ts;
-
-		MPage();
-	};
 
 	struct BPage {
 		uint pbn;
@@ -805,31 +805,7 @@ private:
 		BPage();
 	};
 
-	std::map<long, bool> cmt;
-	MPage *trans_map;
 	BPage *block_map;
-
-	void select_victim_entry(FtlImpl_BDftl::MPage &mpage);
-	void consult_GTD(long dppn, Event &event);
-	void reset_MPage(FtlImpl_BDftl::MPage &mpage);
-	void remove_victims(FtlImpl_BDftl::MPage &mpage);
-
-	void resolve_mapping(Event &event, bool isWrite);
-
-	bool lookup_CMT(long dlpn, Event &event);
-
-	long get_free_translation_page();
-	long get_free_data_page();
-
-
-	// Mapping information
-	int addressPerPage;
-	int addressSize;
-	uint totalCMTentries;
-
-	// Current storage
-	long currentDataPage;
-	long currentTranslationPage;
 };
 
 
@@ -866,6 +842,7 @@ public:
 	friend class FtlImpl_Page;
 	friend class FtlImpl_Bast;
 	friend class FtlImpl_Fast;
+	friend class FtlImpl_DftlParent;
 	friend class FtlImpl_Dftl;
 	friend class FtlImpl_BDftl;
 	Stats stats;
