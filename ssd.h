@@ -797,8 +797,17 @@ private:
 		MPage();
 	};
 
+	struct BPage {
+		uint pbn;
+		unsigned char nextPage;
+		bool optimal;
+
+		BPage();
+	};
+
 	std::map<long, bool> cmt;
 	MPage *trans_map;
+	BPage *block_map;
 
 	void select_victim_entry(FtlImpl_BDftl::MPage &mpage);
 	void consult_GTD(long dppn, Event &event);

@@ -47,6 +47,12 @@ FtlImpl_BDftl::MPage::MPage()
 	this->modified_ts = -1;
 }
 
+FtlImpl_BDftl::BPage::BPage()
+{
+	this->pbn = -1;
+	nextPage = 0;
+	optimal = true;
+}
 
 FtlImpl_BDftl::FtlImpl_BDftl(Controller &controller):
 	FtlParent(controller)
@@ -76,8 +82,12 @@ FtlImpl_BDftl::FtlImpl_BDftl(Controller &controller):
 
 	trans_map = new MPage[ssdSize];
 
+	uint ssdBlockSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
+	block_map = new BPage[ssdBlockSize];
+
+	// TODO: Add SSDBlockSize to the calculation.
 	printf("Total size to map: %uKB\n", ssdSize * PAGE_SIZE / 1024);
-	printf("Using DFTL.\n");
+	printf("Using BDFTL.\n");
 	return;
 }
 
@@ -164,7 +174,7 @@ long FtlImpl_BDftl::get_free_data_page()
 FtlImpl_BDftl::~FtlImpl_BDftl(void)
 {
 	delete trans_map;
-
+	delete block_map;
 	return;
 }
 
@@ -225,12 +235,23 @@ void FtlImpl_BDftl::resolve_mapping(Event &event, bool isWrite)
 enum status FtlImpl_BDftl::read(Event &event)
 {
 	uint dlpn = event.get_logical_address();
+	uint dlbn = dlpn / BLOCK_SIZE;
 
-	resolve_mapping(event, false);
+	// Block-level lookup
+	if (block_map[dlbn].optimal == false)
+	{
+		// DFTL lookup
+		resolve_mapping(event, false);
 
-	event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+	} else {
+		uint dppn = block_map[dlbn].pbn + (dlpn % BLOCK_SIZE);
 
-	controller.stats.numFTLRead++;
+		event.set_address(Address(dppn, PAGE));
+	}
+
+	controller.stats.numMemoryRead += 2; // Block-level lookup + range check
+	controller.stats.numFTLRead++; // Page read
 
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;
@@ -244,15 +265,42 @@ enum status FtlImpl_BDftl::read(Event &event)
 enum status FtlImpl_BDftl::write(Event &event)
 {
 	uint dlpn = event.get_logical_address();
+	uint dlbn = dlpn / BLOCK_SIZE;
 
-	resolve_mapping(event, true);
+	// Block-level lookup
+	if (block_map[dlbn].optimal == false)
+	{
+		// DFTL lookup
+		resolve_mapping(event, true);
 
-	// Get next available data page
-	trans_map[dlpn].ppn = get_free_data_page();
+		// Get next available data page
+		trans_map[dlpn].ppn = get_free_data_page();
 
-	event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+		// Finish DFTL logic
+		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+	} else {
+		// Optimised case for block level lookup
 
-	controller.stats.numFTLWrite++;
+		// Get new block if necessary
+		if (block_map[dlbn].pbn == -1u)
+			block_map[dlbn].pbn = manager.get_free_block(DATA).get_linear_address();
+
+		unsigned char dppn = dlpn % BLOCK_SIZE;
+		if (block_map[dlbn].nextPage == dppn)
+		{
+			controller.stats.numMemoryWrite++; // Update next page
+			event.incr_time_taken(RAM_WRITE_DELAY);
+			block_map[dlbn].nextPage++;
+			event.set_address(Address(block_map[dlbn].pbn + dppn, PAGE));
+		} else {
+			// Transfer the block to DFTL.
+			printf("not yet implemented\n");
+		}
+	}
+
+	controller.stats.numMemoryRead += 3; // Block-level lookup + range check + optimal check
+	event.incr_time_taken(RAM_READ_DELAY*3);
+	controller.stats.numFTLWrite++; // Page reads
 
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;
