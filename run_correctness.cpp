@@ -104,10 +104,12 @@ int main()
 	printf("Test 1. Write sequential test data.\n");
 	result += do_seq(ssd, WRITE, test_data, st.st_size);
 
+	printf("Test 1. Write sequential test data.\n");
+	result += do_seq(ssd, WRITE, test_data, st.st_size);
 
 //	printf("Test 2. Read sequential test data.\n");
 //	result += do_seq(ssd, READ, test_data, st.st_size);
-//
+
 //	printf("Test 3. Write second write.\n");
 //	result += do_seq(ssd, WRITE, test_data, st.st_size);
 //
@@ -130,6 +132,8 @@ int main()
 //	result += do_seq_backward(ssd, READ, test_data, st.st_size);
 
 	printf("Write time: %.10lfs\n", result/1000000);
+
+	ssd->print_statistics();
 	delete ssd;
 	return 0;
 }

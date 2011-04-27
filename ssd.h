@@ -188,7 +188,6 @@ enum block_type {LOG, DATA, LOG_SEQ};
  */
 enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL};
 
-
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
  *
@@ -198,6 +197,7 @@ enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODA
  * constructors that accept args
  * (e.g. a Ssd contains a Controller, Ram, Bus, and Packages). */
 class Address;
+class Stats;
 class Event;
 class Channel;
 class Bus;
@@ -250,6 +250,50 @@ public:
 	void set_linear_address(ulong address, enum address_valid valid);
 	void set_linear_address(ulong address);
 	ulong get_linear_address() const;
+};
+
+class Stats
+{
+public:
+	// Flash Translation Layer
+	long numFTLRead;
+	long numFTLWrite;
+	long numFTLErase;
+
+	// Garbage Collection
+	long numGCRead;
+	long numGCWrite;
+	long numGCErase;
+
+	// Wearleveling
+	long numWLRead;
+	long numWLWrite;
+	long numWLErase;
+
+	// Log based FTL's
+	long numLogMergeSwitch;
+	long numLogMergePartial;
+	long numLogMergeFull;
+
+	// Cache based FTL's
+	long numCacheHits;
+	long numCacheFaults;
+
+	// Memory consumptions (Bytes)
+	long numMemoryTranslation;
+	long numMemoryCache;
+
+	long numMemoryRead;
+	long numMemoryWrite;
+
+	// Advance statictics
+	double translation_overhead() const;
+	double variance_of_io() const;
+	double cache_hit_ratio() const;
+
+	// Constructors, maintainance, output, etc.
+	Stats(void);
+	void print_statistics();
 };
 
 /* Class to emulate a log block with page-level mapping. */
@@ -710,14 +754,15 @@ private:
 		MPage();
 	};
 
-	std::map<long, MPage*> cmt;
+	std::map<long, bool> cmt;
 	MPage *trans_map;
 
-	MPage &select_victim_entry();
-	MPage &consult_GTD(long dppn, Event &event);
+	void select_victim_entry(FtlImpl_Dftl::MPage &mpage);
+	void consult_GTD(long dppn, Event &event, FtlImpl_Dftl::MPage &mpage);
 	void reset_MPage(FtlImpl_Dftl::MPage &mpage);
+	void remove_victims(FtlImpl_Dftl::MPage &mpage);
 
-	bool lookup_CMT(long dlpn, FtlImpl_Dftl::MPage &mpage);
+	bool lookup_CMT(long dlpn, Event &event, FtlImpl_Dftl::MPage &mpage);
 
 	long get_free_translation_page();
 	long get_free_data_page();
@@ -768,6 +813,7 @@ public:
 	friend class FtlImpl_Bast;
 	friend class FtlImpl_Fast;
 	friend class FtlImpl_Dftl;
+	Stats stats;
 private:
 	enum status issue(Event &event_list);
 	ssd::ulong get_erases_remaining(const Address &address) const;
@@ -795,6 +841,7 @@ public:
 	double event_arrive(enum event_type type, ulong logical_address, uint size, double start_time, void *buffer);
 	void *get_result_buffer();
 	friend class Controller;
+	void print_statistics();
 private:
 	enum status read(Event &event);
 	enum status write(Event &event);
@@ -813,6 +860,7 @@ private:
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
 	ssd::uint get_num_invalid(const Address &address) const;
+
 	uint size;
 	Controller controller;
 	Ram ram;
