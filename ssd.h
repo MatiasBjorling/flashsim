@@ -275,6 +275,9 @@ public:
 	long numLogMergePartial;
 	long numLogMergeFull;
 
+	// Page based FTL's
+	long numPageBlockToPageConversion;
+
 	// Cache based FTL's
 	long numCacheHits;
 	long numCacheFaults;
@@ -443,7 +446,7 @@ private:
 class Block 
 {
 public:
-	Block(const Plane &parent, uint size = BLOCK_SIZE, ulong erases_remaining = BLOCK_ERASES, double erase_delay = BLOCK_ERASE_DELAY);
+	Block(const Plane &parent, uint size = BLOCK_SIZE, ulong erases_remaining = BLOCK_ERASES, double erase_delay = BLOCK_ERASE_DELAY, long physical_address = 0);
 	~Block(void);
 	enum status read(Event &event);
 	enum status write(Event &event);
@@ -456,10 +459,14 @@ public:
 	enum page_state get_state(uint page) const;
 	enum page_state get_state(const Address &address) const;
 	double get_last_erase_time(void) const;
+	double get_modification_time(void) const;
 	ulong get_erases_remaining(void) const;
 	uint get_size(void) const;
 	enum status get_next_page(Address &address) const;
 	void invalidate_page(uint page);
+	long get_physical_address(void) const;
+	Block *get_pointer(void);
+	bool operator< (const Block& x) const { return modification_time < x.modification_time; }
 private:
 	uint size;
 	Page * const data;
@@ -470,6 +477,8 @@ private:
 	ulong erases_remaining;
 	double last_erase_time;
 	double erase_delay;
+	double modification_time;
+	long physical_address;
 };
 
 /* The plane is the data storage hardware unit that contains blocks.
@@ -478,7 +487,7 @@ private:
 class Plane 
 {
 public:
-	Plane(const Die &parent, uint plane_size = PLANE_SIZE, double reg_read_delay = PLANE_REG_READ_DELAY, double reg_write_delay = PLANE_REG_WRITE_DELAY);
+	Plane(const Die &parent, uint plane_size = PLANE_SIZE, double reg_read_delay = PLANE_REG_READ_DELAY, double reg_write_delay = PLANE_REG_WRITE_DELAY, long physical_address = 0);
 	~Plane(void);
 	enum status read(Event &event);
 	enum status write(Event &event);
@@ -496,6 +505,7 @@ public:
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
 	ssd::uint get_num_invalid(const Address &address) const;
+	Block *get_block_pointer(const Address & address);
 private:
 	void update_wear_stats(void);
 	enum status get_next_page(void);
@@ -516,7 +526,7 @@ private:
 class Die 
 {
 public:
-	Die(const Package &parent, Channel &channel, uint die_size = DIE_SIZE);
+	Die(const Package &parent, Channel &channel, uint die_size = DIE_SIZE, long physical_address = 0);
 	~Die(void);
 	enum status read(Event &event);
 	enum status write(Event &event);
@@ -534,6 +544,7 @@ public:
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
 	ssd::uint get_num_invalid(const Address &address) const;
+	Block *get_block_pointer(const Address & address);
 private:
 	void update_wear_stats(const Address &address);
 	uint size;
@@ -552,7 +563,7 @@ private:
 class Package 
 {
 public:
-	Package (const Ssd &parent, Channel &channel, uint package_size = PACKAGE_SIZE);
+	Package (const Ssd &parent, Channel &channel, uint package_size = PACKAGE_SIZE, long physical_address = 0);
 	~Package ();
 	enum status read(Event &event);
 	enum status write(Event &event);
@@ -569,6 +580,7 @@ public:
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
 	ssd::uint get_num_invalid(const Address &address) const;
+	Block *get_block_pointer(const Address & address);
 private:
 	void update_wear_stats (const Address &address);
 	uint size;
@@ -632,8 +644,12 @@ private:
 	ulong map_offset;
 	ulong map_space_capacity;
 
-	std::vector<ulong> free_list;
-	std::vector<ulong> invalid_list;
+	// Cost/Benefit priority queue.
+	std::priority_queue<Block*> active_list;
+
+	// Usual block lists
+	std::vector<Block*> free_list;
+	std::vector<Block*> invalid_list;
 
 	// Until all pages have been requested, we serve them from a linear
 	// address space.
@@ -659,6 +675,7 @@ public:
 	void get_least_worn(Address &address) const;
 	enum page_state get_state(const Address &address) const;
 	enum block_state get_block_state(const Address &address) const;
+	Block *get_block_pointer(const Address & address);
 
 	Address resolve_logical_address(unsigned int logicalAddress);
 
@@ -806,6 +823,8 @@ private:
 	};
 
 	BPage *block_map;
+
+
 };
 
 
@@ -857,6 +876,7 @@ private:
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
 	ssd::uint get_num_invalid(const Address &address) const;
+	Block *get_block_pointer(const Address & address);
 	Ssd &ssd;
 	FtlParent *ftl;
 };
@@ -892,6 +912,7 @@ private:
 	ssd::uint get_num_free(const Address &address) const;
 	ssd::uint get_num_valid(const Address &address) const;
 	ssd::uint get_num_invalid(const Address &address) const;
+	Block *get_block_pointer(const Address & address);
 
 	uint size;
 	Controller controller;

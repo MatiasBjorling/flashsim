@@ -153,7 +153,11 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 		uint j;
 		printf("Table entries before unlock()\n");
 		for(j = 0; j < table_size; j++)
-			printf("%lf, %lf\n", lock_time[j], unlock_time[j]);
+		{
+			if (lock_time[j] != -1)
+				printf("%lf, %lf\n", lock_time[j], unlock_time[j]);
+		}
+
 		printf("Press ENTER to continue...");
 		fflush(stdout);
 		getchar();
@@ -165,7 +169,11 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 	#ifndef NDEBUG
 		printf("Table entries after unlock()\n");
 		for(j = 0; j < table_size; j++)
-			printf("%lf, %lf\n", lock_time[j], unlock_time[j]);
+		{
+			if (lock_time[j] != -1)
+				printf("%lf, %lf\n", lock_time[j], unlock_time[j]);
+		}
+
 		printf("Press ENTER to continue...");
 		fflush(stdout);
 		getchar();

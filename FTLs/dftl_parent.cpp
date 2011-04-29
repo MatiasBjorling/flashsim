@@ -77,6 +77,9 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 
 	trans_map = new MPage[ssdSize];
 
+	for (uint i=0;i<ssdSize;i++)
+		trans_map[i].vpn = i;
+
 	return;
 }
 
@@ -107,17 +110,13 @@ void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
 {
 	// TODO: Add translation page counter
 
-	// Lookup mapping page
-	if (trans_map[dlpn].ppn == -1)
-		trans_map[dlpn].vpn = dlpn;
-
 	// Simulate that we goto translation map and read the mapping page.
 	Event *readEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time());
-	readEvent->set_address(Address(trans_map[dlpn].ppn, PAGE));
+	readEvent->set_address(Address(1, PAGE));
 	readEvent->set_noop(true);
 
-	Event *lastEvent = event.get_last_event(event);
-	lastEvent->set_next(*readEvent);
+	controller.issue(*readEvent);
+	event.incr_time_taken(readEvent->get_time_taken()+readEvent->get_bus_wait_time());
 
 	controller.stats.numFTLRead++;
 }

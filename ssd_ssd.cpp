@@ -76,7 +76,7 @@ Ssd::Ssd(uint ssd_size):
 	}
 	for (i = 0; i < ssd_size; i++)
 	{
-		(void) new (&data[i]) Package(*this, bus.get_channel(i), PACKAGE_SIZE);
+		(void) new (&data[i]) Package(*this, bus.get_channel(i), PACKAGE_SIZE, PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE*i);
 	}
 	
 	// Check for 32bit machine. We do not allow page data on 32bit machines.
@@ -362,4 +362,10 @@ ssd::uint Ssd::get_num_invalid(const Address &address) const
 void Ssd::print_statistics()
 {
 	controller.stats.print_statistics();
+}
+
+Block *Ssd::get_block_pointer(const Address & address)
+{
+	assert(address.valid >= PACKAGE);
+	return data[address.package].get_block_pointer(address);
 }

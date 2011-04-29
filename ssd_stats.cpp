@@ -51,6 +51,9 @@ Stats::Stats()
 	numLogMergePartial = 0;
 	numLogMergeFull = 0;
 
+	// Page based FTL's
+	numPageBlockToPageConversion = 0;
+
 	// Cache based FTL's
 	numCacheHits = 0;
 	numCacheFaults = 0;
@@ -71,6 +74,7 @@ void Stats::print_statistics()
 	printf("GC  Reads: %li\t Writes: %li\t Erases: %li\n", numGCRead, numGCWrite, numGCErase);
 	printf("WL  Reads: %li\t Writes: %li\t Erases: %li\n", numWLRead, numWLWrite, numWLErase);
 	printf("Log FTL Switch: %li Partial: %li Full: %li\n", numLogMergeSwitch, numLogMergePartial, numLogMergeFull);
+	printf("Page FTL Convertions: %li\n", numPageBlockToPageConversion);
 	printf("Cache Hits: %li Faults: %li Hit Ratio: %f\n", numCacheHits, numCacheFaults, (double)numCacheHits/(double)(numCacheHits+numCacheFaults));
 	printf("Memory Consumption:\n");
 	printf("Tranlation: %li Cache: %li\n", numMemoryTranslation, numMemoryCache);

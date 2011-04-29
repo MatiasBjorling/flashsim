@@ -30,7 +30,7 @@
 
 using namespace ssd;
 
-Die::Die(const Package &parent, Channel &channel, uint die_size):
+Die::Die(const Package &parent, Channel &channel, uint die_size, long physical_address):
 	size(die_size),
 
 	/* use a const pointer (Plane * const data) to use as an array
@@ -66,8 +66,11 @@ Die::Die(const Package &parent, Channel &channel, uint die_size):
 		fprintf(stderr, "Die error: %s: constructor unable to allocate Plane data\n", __func__);
 		exit(MEM_ERR);
 	}
+
+
+
 	for(i = 0; i < size; i++)
-		(void) new (&data[i]) Plane(*this, PLANE_SIZE, PLANE_REG_READ_DELAY, PLANE_REG_WRITE_DELAY);
+		(void) new (&data[i]) Plane(*this, PLANE_SIZE, PLANE_REG_READ_DELAY, PLANE_REG_WRITE_DELAY, physical_address+(PLANE_SIZE*i));
 
 	return;
 }
@@ -229,8 +232,14 @@ ssd::uint Die::get_num_valid(const Address &address) const
 	return data[address.plane].get_num_valid(address);
 }   
 
-ssd::uint ssd::Die::get_num_invalid(const Address & address) const
+ssd::uint Die::get_num_invalid(const Address & address) const
 {
 	assert(address.valid >= PLANE);
 	return data[address.plane].get_num_invalid(address);
+}
+
+Block *Die::get_block_pointer(const Address & address)
+{
+	assert(address.valid >= PLANE);
+	return data[address.plane].get_block_pointer(address);
 }

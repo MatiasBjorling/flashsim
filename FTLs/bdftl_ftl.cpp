@@ -85,6 +85,7 @@ enum status FtlImpl_BDftl::read(Event &event)
 		event.set_address(Address(dppn, PAGE));
 	}
 
+	event.incr_time_taken(RAM_READ_DELAY*2);
 	controller.stats.numMemoryRead += 2; // Block-level lookup + range check
 	controller.stats.numFTLRead++; // Page read
 
@@ -128,8 +129,41 @@ enum status FtlImpl_BDftl::write(Event &event)
 			block_map[dlbn].nextPage++;
 			event.set_address(Address(block_map[dlbn].pbn + dppn, PAGE));
 		} else {
-			// Transfer the block to DFTL.
-			printf("not yet implemented\n");
+			/*
+			 * Transfer the block to DFTL.
+			 * 1. Get number of pages to write
+			 * 2. Get start address for translation map
+			 * 3. Write mappings to trans_map
+			 * 4. Make block non-optimal
+			 * 5. Write the new I/O via DFTL
+			 */
+
+			// 1-3
+			uint numPages = block_map[dlbn].nextPage+1;
+			long startAdr = dlbn * BLOCK_SIZE;
+
+			for (uint i=0;i<numPages;i++)
+			{
+				trans_map[startAdr+i].ppn = block_map[dlbn].pbn+i;
+				trans_map[startAdr+i].create_ts = event.get_start_time();
+				trans_map[startAdr+i].modified_ts = event.get_start_time() +1; // Have to be different for the block to be updated
+				cmt[startAdr+i] = true;
+
+				event.incr_time_taken(RAM_WRITE_DELAY);
+				controller.stats.numMemoryWrite++;
+			}
+
+			// 4. Set block to non optimal
+			event.incr_time_taken(RAM_WRITE_DELAY);
+			controller.stats.numMemoryWrite++;
+			block_map[dlbn].optimal = false;
+
+			// 5. DFTL lookup
+			resolve_mapping(event, true);
+			trans_map[dlpn].ppn = get_free_data_page();
+			event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+
+			controller.stats.numPageBlockToPageConversion++;
 		}
 	}
 

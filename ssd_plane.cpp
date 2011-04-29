@@ -31,7 +31,7 @@
 
 using namespace ssd;
 
-Plane::Plane(const Die &parent, uint plane_size, double reg_read_delay, double reg_write_delay):
+Plane::Plane(const Die &parent, uint plane_size, double reg_read_delay, double reg_write_delay, long physical_address):
 	size(plane_size),
 
 	/* use a const pointer (Block * const data) to use as an array
@@ -90,7 +90,7 @@ Plane::Plane(const Die &parent, uint plane_size, double reg_read_delay, double r
 	}
 
 	for(i = 0; i < size; i++)
-		(void) new (&data[i]) Block(*this, BLOCK_SIZE, BLOCK_ERASES, BLOCK_ERASE_DELAY);
+		(void) new (&data[i]) Block(*this, BLOCK_SIZE, BLOCK_ERASES, BLOCK_ERASE_DELAY, physical_address+i);
 
 	return;
 }
@@ -389,8 +389,14 @@ ssd::uint Plane::get_num_valid(const Address &address) const
 	return data[address.block].get_pages_valid();
 }
 
-ssd::uint ssd::Plane::get_num_invalid(const Address & address) const
+ssd::uint Plane::get_num_invalid(const Address & address) const
 {
 	assert(address.valid >= PLANE);
 	return data[address.block].get_pages_invalid();
+}
+
+Block *Plane::get_block_pointer(const Address & address)
+{
+	assert(address.valid >= PLANE);
+	return data[address.block].get_pointer();
 }

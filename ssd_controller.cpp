@@ -189,3 +189,8 @@ ssd::uint Controller::get_num_invalid(const Address &address) const
 	return ssd.get_num_invalid(address);
 }
 
+Block *Controller::get_block_pointer(const Address & address)
+{
+	return ssd.get_block_pointer(address);
+}
+

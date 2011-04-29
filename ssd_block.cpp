@@ -30,7 +30,7 @@
 
 using namespace ssd;
 
-Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, double erase_delay):
+Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, double erase_delay, long physical_address):
 	size(block_size),
 
 	/* use a const pointer (Page * const data) to use as an array
@@ -72,6 +72,11 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 	}
 	for(i = 0; i < size; i++)
 		(void) new (&data[i]) Page(*this, PAGE_READ_DELAY, PAGE_WRITE_DELAY);
+
+	this->physical_address = physical_address;
+
+	printf("%li\n", physical_address);
+
 	return;
 }
 
@@ -101,6 +106,7 @@ enum status Block::write(Event &event)
 	{
 		pages_valid++;
 		state = ACTIVE;
+		modification_time = event.get_start_time();
 	}
 	return ret;
 }
@@ -202,6 +208,11 @@ void Block::invalidate_page(uint page)
 	return;
 }
 
+double Block::get_modification_time(void) const
+{
+	return modification_time;
+}
+
 /* method to find the next usable (empty) page in this block
  * method is called by write and erase methods and in Plane::get_next_page() */
 enum status Block::get_next_page(Address &address) const
@@ -218,4 +229,14 @@ enum status Block::get_next_page(Address &address) const
 		}
 	}
 	return FAILURE;
+}
+
+long Block::get_physical_address(void) const
+{
+	return physical_address;
+}
+
+Block *Block::get_pointer(void)
+{
+	return this;
 }

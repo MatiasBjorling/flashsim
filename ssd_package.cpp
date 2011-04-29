@@ -32,7 +32,7 @@
 
 using namespace ssd;
 
-Package::Package(const ssd::Ssd &parent, Channel &channel, uint package_size):
+Package::Package(const ssd::Ssd &parent, Channel &channel, uint package_size, long physical_address):
 	size(package_size),
 
 	/* use a const pointer (Die * const data) to use as an array
@@ -66,7 +66,10 @@ Package::Package(const ssd::Ssd &parent, Channel &channel, uint package_size):
 	}
 
 	for(i = 0; i < size; i++)
-		(void) new (&data[i]) Die(*this, channel, DIE_SIZE);
+	{
+		(void) new (&data[i]) Die(*this, channel, DIE_SIZE, physical_address+(DIE_SIZE*PLANE_SIZE*i));
+	}
+
 	return;
 }
 
@@ -199,4 +202,10 @@ ssd::uint Package::get_num_valid(const Address &address) const
 {
 	assert(address.valid >= DIE);
 	return data[address.die].get_num_valid(address);
+}
+
+Block *Package::get_block_pointer(const Address & address)
+{
+	assert(address.valid >= DIE);
+	return data[address.die].get_block_pointer(address);
 }

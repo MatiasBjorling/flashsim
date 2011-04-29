@@ -52,3 +52,8 @@ enum block_state FtlParent::get_block_state(const Address &address) const
 {
 	return controller.get_block_state(address);
 }
+
+Block *FtlParent::get_block_pointer(const Address &address)
+{
+	return controller.get_block_pointer(address);
+}

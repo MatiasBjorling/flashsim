@@ -37,6 +37,7 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 
 	directoryCurrentPage = 0;
 	simpleCurrentFree = 0;
+
 	return;
 }
 
@@ -60,7 +61,7 @@ void Block_manager::get_page_block(Address &address)
 	else
 	{
 		assert(free_list.size() != 0);
-		address.set_linear_address(free_list.back(), BLOCK);
+		address.set_linear_address(free_list.back()->get_physical_address(), BLOCK);
 		free_list.pop_back();
 	}
 }
@@ -111,7 +112,8 @@ void Block_manager::print_statistics()
 
 void Block_manager::invalidate(Address &address, block_type type)
 {
-	invalid_list.push_back(address.get_linear_address());
+	// INSERT BACK
+	invalid_list.push_back(ftl.get_block_pointer(address));
 	switch (type)
 	{
 	case DATA:
@@ -136,10 +138,12 @@ void Block_manager::insert_events(Event &event)
 	// Goto last element and add eventual erase events.
 	Event *eventOps = event.get_last_event(event);
 
-	for (std::vector<ulong>::iterator it = invalid_list.begin(); it != invalid_list.end(); it++)
+
+	for (std::vector<Block*>::iterator it = invalid_list.begin(); it != invalid_list.end(); it++)
 	{
 		Event *erase_event = new Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
-		Address address = new Address(*it, BLOCK);
+
+		Address address = new Address((*it)->get_physical_address(), BLOCK);
 
 		printf("Erasing address: %u Block: %u\n", address.get_linear_address(), address.block);
 
@@ -158,17 +162,18 @@ Address Block_manager::get_free_block(block_type type)
 	switch (type)
 	{
 	case DATA:
-		get_page_block(address);
 		data_active++;
 		break;
 	case LOG:
 		if (log_active == max_log_blocks)
 			throw std::bad_alloc();
 
-		get_page_block(address);
 		log_active++;
 		break;
 	}
+
+	get_page_block(address);
+
 	return address;
 }
 
