@@ -75,8 +75,6 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 
 	this->physical_address = physical_address;
 
-	printf("%li\n", physical_address);
-
 	return;
 }
 
@@ -141,6 +139,21 @@ enum status Block::_erase(Event &event)
 	pages_invalid = 0;
 	state = FREE;
 	return SUCCESS;
+}
+
+bool Block::operator< (const Block& x) const
+{
+	// We assumme we have to read all pages to write out valid pages. (therefore 1+u) else (1-u)
+	// cost/benefit = (age * (1+u)) / 2u
+
+	float ratio1 = ((BLOCK_SIZE-pages_valid) + pages_invalid) / BLOCK_SIZE;
+	float ratio2 = ((BLOCK_SIZE-x.pages_valid) + x.pages_invalid) / BLOCK_SIZE;
+
+	float bc1 = (modification_time * 1+ratio1) / (2*ratio1);
+	float bc2 = (x.modification_time * 1+ratio2) / (2*ratio2);
+
+	printf("ssjfsdfjasdfjkl\n");
+	return bc1 < bc2;
 }
 
 const Plane &Block::get_parent(void) const

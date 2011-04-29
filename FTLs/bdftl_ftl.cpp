@@ -171,6 +171,9 @@ enum status FtlImpl_BDftl::write(Event &event)
 	event.incr_time_taken(RAM_READ_DELAY*3);
 	controller.stats.numFTLWrite++; // Page reads
 
+	// Insert garbage collection
+	manager.insert_events(event);
+
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;
 
@@ -178,3 +181,9 @@ enum status FtlImpl_BDftl::write(Event &event)
 
 	return SUCCESS;
 }
+
+void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
+{
+	return;
+}
+

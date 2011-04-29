@@ -86,10 +86,18 @@ enum status FtlImpl_Dftl::write(Event &event)
 
 	controller.stats.numFTLWrite++;
 
+	// Insert garbage collection
+	manager.insert_events(event);
+
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;
 
 	event.consolidate_metaevent(event);
 
 	return SUCCESS;
+}
+
+void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
+{
+	return;
 }

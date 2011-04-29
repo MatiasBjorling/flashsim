@@ -466,7 +466,7 @@ public:
 	void invalidate_page(uint page);
 	long get_physical_address(void) const;
 	Block *get_pointer(void);
-	bool operator< (const Block& x) const { return modification_time < x.modification_time; }
+	bool operator< (const Block& x) const;
 private:
 	uint size;
 	Page * const data;
@@ -677,6 +677,8 @@ public:
 	enum block_state get_block_state(const Address &address) const;
 	Block *get_block_pointer(const Address & address);
 
+	void cleanup_block(Event &event, Block *block);
+
 	Address resolve_logical_address(unsigned int logicalAddress);
 
 protected:
@@ -802,6 +804,7 @@ public:
 	~FtlImpl_Dftl();
 	enum status read(Event &event);
 	enum status write(Event &event);
+	void cleanup_block(Event &event, Block *block);
 };
 
 class FtlImpl_BDftl : public FtlImpl_DftlParent
@@ -811,9 +814,8 @@ public:
 	~FtlImpl_BDftl();
 	enum status read(Event &event);
 	enum status write(Event &event);
+	void cleanup_block(Event &event, Block *block);
 private:
-
-
 	struct BPage {
 		uint pbn;
 		unsigned char nextPage;
@@ -823,8 +825,6 @@ private:
 	};
 
 	BPage *block_map;
-
-
 };
 
 

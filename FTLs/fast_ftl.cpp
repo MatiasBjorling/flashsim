@@ -136,6 +136,9 @@ enum status FtlImpl_Fast::read(Event &event)
 		}
 	}
 
+	// Insert garbage collection
+	manager.insert_events(event);
+
 	return controller.issue(event);
 }
 
@@ -537,6 +540,9 @@ enum status FtlImpl_Fast::write(Event &event)
 			write_to_log_block(event, logicalBlockAddress);
 		}
 	}
+
+	// Insert garbage collection
+	manager.insert_events(event);
 
 	// Add write events if necessary.
 	manager.simulate_map_write(event);
