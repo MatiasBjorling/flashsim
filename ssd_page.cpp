@@ -73,7 +73,7 @@ enum status Page::_read(Event &event)
 	event.incr_time_taken(read_delay);
 	if (!event.get_noop())
 	{
-		if (PAGE_ENABLE_DATA )
+		if (PAGE_ENABLE_DATA)
 				global_buffer = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
 
 		if (state == EMPTY)

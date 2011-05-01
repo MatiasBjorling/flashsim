@@ -342,6 +342,8 @@ enum status FtlImpl_Bast::write(Event &event)
 		event.set_address(dataPage);
 	}
 
+	manager.insert_events(event);
+
 	if (controller.issue(event) == FAILURE)
 		return FAILURE;
 

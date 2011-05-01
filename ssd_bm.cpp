@@ -136,33 +136,32 @@ void Block_manager::insert_events(Event &event)
 	//print_statistics();
 
 	// Calculate if GC should be activated.
-	float used = invalid_list.size() + active_list.size() - free_list.size();
-	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE*BLOCK_SIZE;
+	printf("Invalid: %i Active: %i Free: %i\n", invalid_list.size(), active_list.size(), free_list.size());
+	float used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
+	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
 	float ratio = used/total;
 
 	if (ratio < 0.7)
 		return;
 
-	// Goto last element and add eventual erase events.
-	Event *eventOps = event.get_last_event(event);
-
 	uint num_to_erase = 4; // Magic number
 
 	// First step and least expensive it to go though invalid list.
-	//for (std::vector<Block*>::iterator it = invalid_list.rbegin(); it != invalid_list.rend(); it++)
-	while (num_to_erase != 0&& invalid_list.size() != 0)
+	while (num_to_erase != 0 && invalid_list.size() != 0)
 	{
-		Event *erase_event = new Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
+		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
 
 		Address address = new Address(invalid_list.back()->get_physical_address(), BLOCK);
+		free_list.push_back(invalid_list.back());
+
 		invalid_list.pop_back();
 
 		printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
 
-		erase_event->set_address(address);
+		erase_event.set_address(address);
 
-		eventOps->set_next(*erase_event);
-		eventOps = erase_event;
+		ftl.controller.issue(erase_event);
+		event.consolidate_metaevent(erase_event);
 
 		num_to_erase--;
 		ftl.controller.stats.numFTLErase++;
@@ -178,20 +177,17 @@ void Block_manager::insert_events(Event &event)
 		// Let the FTL handle cleanup of the block.
 		ftl.cleanup_block(event, blockErase);
 
-		// Goto last element and add eventual erase events.
-		eventOps = event.get_last_event(event);
-
 		// Create erase event and attach to current event queue.
-		Event *erase_event = new Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
+		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
 
 		Address address = new Address(blockErase->get_physical_address(), BLOCK);
-
 		printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
+		erase_event.set_address(address);
 
-		erase_event->set_address(address);
+		free_list.push_back(blockErase);
 
-		eventOps->set_next(*erase_event);
-		eventOps = erase_event;
+		ftl.controller.issue(erase_event);
+		event.consolidate_metaevent(erase_event);
 
 		num_to_erase--;
 		ftl.controller.stats.numFTLErase++;
@@ -201,20 +197,21 @@ void Block_manager::insert_events(Event &event)
 Address Block_manager::get_free_block(block_type type)
 {
 	Address address;
+	get_page_block(address);
 	switch (type)
 	{
 	case DATA:
+		ftl.controller.get_block_pointer(address)->set_block_type(DATA);
 		data_active++;
 		break;
 	case LOG:
 		if (log_active == max_log_blocks)
 			throw std::bad_alloc();
 
+		ftl.controller.get_block_pointer(address)->set_block_type(LOG);
 		log_active++;
 		break;
 	}
-
-	get_page_block(address);
 
 	active_list.push(ftl.get_block_pointer(address));
 

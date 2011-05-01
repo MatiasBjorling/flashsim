@@ -89,6 +89,7 @@ void FtlImpl_DftlParent::select_victim_entry(FtlImpl_DftlParent::MPage &mpage)
 	double evictPageTime = trans_map[cmt.begin()->first].modified_ts;
 	long evictPage = cmt.begin()->first;
 
+	// Retrieves the LRU CMT object
 	std::map<long, bool>::iterator i = cmt.begin();
 	while (i != cmt.end())
 	{
@@ -111,12 +112,12 @@ void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
 	// TODO: Add translation page counter
 
 	// Simulate that we goto translation map and read the mapping page.
-	Event *readEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time());
-	readEvent->set_address(Address(1, PAGE));
-	readEvent->set_noop(true);
+	Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+	readEvent.set_address(Address(1, PAGE));
+	readEvent.set_noop(true);
 
-	controller.issue(*readEvent);
-	event.incr_time_taken(readEvent->get_time_taken()+readEvent->get_bus_wait_time());
+	controller.issue(readEvent);
+	event.consolidate_metaevent(readEvent);
 
 	controller.stats.numFTLRead++;
 }
@@ -161,9 +162,7 @@ long FtlImpl_DftlParent::get_free_data_page()
 
 FtlImpl_DftlParent::~FtlImpl_DftlParent(void)
 {
-	delete trans_map;
-
-	return;
+	delete[] trans_map;
 }
 
 void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)

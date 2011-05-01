@@ -253,3 +253,13 @@ Block *Block::get_pointer(void)
 {
 	return this;
 }
+
+block_type Block::get_block_type(void) const
+{
+	return this->btype;
+}
+
+void Block::set_block_type(block_type value)
+{
+	this->btype = value;
+}

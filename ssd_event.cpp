@@ -40,7 +40,8 @@ Event::Event(enum event_type type, ulong logical_address, uint size, double star
 	logical_address(logical_address),
 	size(size),
 	next(NULL),
-	payload(NULL)
+	payload(NULL),
+	noop(false)
 {
 	assert(start_time >= 0.0);
 	return;

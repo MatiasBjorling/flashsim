@@ -467,6 +467,8 @@ public:
 	long get_physical_address(void) const;
 	Block *get_pointer(void);
 	bool operator< (const Block& x) const;
+	block_type get_block_type(void) const;
+	void set_block_type(block_type value);
 private:
 	uint size;
 	Page * const data;
@@ -479,6 +481,7 @@ private:
 	double erase_delay;
 	double modification_time;
 	long physical_address;
+	block_type btype;
 };
 
 /* The plane is the data storage hardware unit that contains blocks.
@@ -667,8 +670,10 @@ class FtlParent
 public:
 	FtlParent(Controller &controller);
 
+	virtual ~FtlParent () {};
 	virtual enum status read(Event &event) = 0;
 	virtual enum status write(Event &event) = 0;
+
 	friend class Block_manager;
 
 	ulong get_erases_remaining(const Address &address) const;
@@ -864,6 +869,7 @@ public:
 	friend class FtlImpl_DftlParent;
 	friend class FtlImpl_Dftl;
 	friend class FtlImpl_BDftl;
+	friend class Block_manager;
 	Stats stats;
 private:
 	enum status issue(Event &event_list);
