@@ -648,7 +648,7 @@ private:
 	ulong map_space_capacity;
 
 	// Cost/Benefit priority queue.
-	std::priority_queue<Block*> active_list;
+	std::vector<Block*> active_list;
 
 	// Usual block lists
 	std::vector<Block*> free_list;
@@ -673,6 +673,8 @@ public:
 	virtual ~FtlParent () {};
 	virtual enum status read(Event &event) = 0;
 	virtual enum status write(Event &event) = 0;
+	virtual void cleanup_block(Event &event, Block *block);
+
 
 	friend class Block_manager;
 
@@ -682,7 +684,7 @@ public:
 	enum block_state get_block_state(const Address &address) const;
 	Block *get_block_pointer(const Address & address);
 
-	void cleanup_block(Event &event, Block *block);
+
 
 	Address resolve_logical_address(unsigned int logicalAddress);
 

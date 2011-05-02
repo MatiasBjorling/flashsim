@@ -92,9 +92,7 @@ FtlImpl_Bast::FtlImpl_Bast(Controller &controller):
 	data_list = new long[numBlocks];
 
 	for (uint i=0;i<numBlocks;i++)
-	{
 		data_list[i] = -1;
-	}
 
 	printf("Total mapping table size: %luKB\n", numBlocks * sizeof(uint) / 1024);
 	printf("Using BAST FTL.\n");
@@ -104,7 +102,6 @@ FtlImpl_Bast::FtlImpl_Bast(Controller &controller):
 FtlImpl_Bast::~FtlImpl_Bast(void)
 {
 	delete data_list;
-
 	return;
 }
 
@@ -112,8 +109,7 @@ enum status FtlImpl_Bast::read(Event &event)
 {
 	// Find block
 	long lookupBlock = (event.get_logical_address() >> addressShift);
-	Address eventAddress;
-	eventAddress.set_linear_address(event.get_logical_address());
+	Address eventAddress = Address(event.get_logical_address(), PAGE);
 
 	LogPageBlock *logBlock = NULL;
 	if (log_map.find(lookupBlock) != log_map.end())
@@ -121,23 +117,28 @@ enum status FtlImpl_Bast::read(Event &event)
 
 	if (data_list[lookupBlock] == -1 && logBlock != NULL && logBlock->pages[eventAddress.page] == -1)
 	{
-		event.set_address(new Address(0, PAGE));
+		event.set_address(Address(0, PAGE));
 		fprintf(stderr, "Page read not written. Logical Address: %li\n", event.get_logical_address());
 		return FAILURE;
 	}
 
+	// Statistics
+	controller.stats.numFTLRead++;
+
 	// If page is in the log block
 	if (logBlock != NULL && logBlock->pages[eventAddress.page] != -1)
 	{
-		Address returnAddress = new Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
+		Address returnAddress = Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
 		event.set_address(returnAddress);
 
 		manager.simulate_map_read(event);
-
+		printf("Reading: ");
+		returnAddress.print(stdout);
+		printf("\n");
 		return controller.issue(event);
 	} else {
 		// If page is in the data block
-		Address returnAddress = new Address(data_list[lookupBlock]+ event.get_logical_address() % BLOCK_SIZE , PAGE);
+		Address returnAddress = Address(data_list[lookupBlock]+ event.get_logical_address() % BLOCK_SIZE , PAGE);
 		event.set_address(returnAddress);
 
 		manager.simulate_map_read(event);
@@ -148,6 +149,52 @@ enum status FtlImpl_Bast::read(Event &event)
 	return FAILURE;
 }
 
+enum status FtlImpl_Bast::write(Event &event)
+{
+	LogPageBlock *logBlock = NULL;
+	long lba = (event.get_logical_address() >> addressShift);
+	Address eventAddress;
+	eventAddress.set_linear_address(event.get_logical_address());
+
+
+
+	if (log_map.find(lba) == log_map.end())
+		allocate_new_logblock(logBlock, lba, event);
+
+	logBlock = log_map[lba];
+
+	// Can it fit inside the existing log block. Issue the request.
+	uint numValid = controller.get_num_valid(&logBlock->address);
+	if (numValid < BLOCK_SIZE)
+	{
+		logBlock->pages[eventAddress.page] = numValid;
+
+		Address logBlockAddress = logBlock->address;
+
+		controller.get_free_page(logBlockAddress);
+		event.set_address(logBlockAddress);
+	} else {
+
+		if (!is_sequential(logBlock, lba, event))
+			random_merge(logBlock, lba, event);
+
+		allocate_new_logblock(logBlock, lba, event);
+
+		// Write the current io to a new block.
+		logBlock->pages[eventAddress.page] = 0;
+		Address dataPage = logBlock->address;
+		dataPage.valid = PAGE;
+		event.set_address(dataPage);
+	}
+
+	manager.insert_events(event);
+
+	// Statistics
+	controller.stats.numFTLWrite++;
+
+	return controller.issue(event);
+}
+
 
 void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
 {
@@ -155,8 +202,6 @@ void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlo
 	{
 		long exLogicalBlock = (*log_map.begin()).first;
 		LogPageBlock *exLogBlock = (*log_map.begin()).second;
-
-		//printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
 
 		if (!is_sequential(exLogBlock, exLogicalBlock, event))
 			random_merge(exLogBlock, exLogicalBlock, event);
@@ -185,31 +230,28 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddres
 	// Is block switch possible? i.e. log block switch
 	bool isSequential = true;
 	for (uint i=0;i<BLOCK_SIZE;i++)
-	{
 		if (logBlock->pages[i] != i)
 		{
 			isSequential = false;
 			break;
 		}
-	}
 
 	if (isSequential)
 	{
 		manager.promote_block(DATA);
 
 		// Add to empty list i.e. switch without erasing the datablock.
-		Address a;
-		a.set_linear_address(data_list[logicalBlockAddress], BLOCK);
 		if (data_list[logicalBlockAddress] != -1)
-			manager.invalidate(a, DATA);
+		{
+			Address address = Address(data_list[logicalBlockAddress], BLOCK);
+			manager.invalidate(address, DATA);
+		}
 
 		data_list[logicalBlockAddress] = logBlock->address.get_linear_address();
 
 		dispose_logblock(logBlock, logicalBlockAddress);
 
 		manager.simulate_map_write(event);
-
-		//printf("Wrote sequential\n");
 	}
 
 	return isSequential;
@@ -227,64 +269,47 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 	 * 6. put data and log block into the invalidate list.
 	 */
 
-	Address eventAddress;
-	eventAddress.set_linear_address(event.get_logical_address());
+	Address eventAddress = Address(event.get_logical_address(), PAGE);
 
 	Address newDataBlock = manager.get_free_block(DATA);
 	printf("Using new data block with address: %lu Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
 
-	Event *eventOps = event.get_last_event(event);
-	Event *newEvent = NULL;
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
 		// Lookup page table and see if page exist in log page
 		Address readAddress;
 		if (logBlock->pages[eventAddress.page] != -1)
-		{
 			readAddress.set_linear_address(logBlock->address.real_address + logBlock->pages[i], PAGE);
-		}
 		else if (data_list[logicalBlockAddress] != -1)
-		{
 			readAddress.set_linear_address(data_list[logicalBlockAddress] + i, PAGE);
-		}
 		else
-		{
-			printf("Empty page.\n");
-			continue;
-		}
+			continue; // Empty page
 
-		if((newEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time())) == NULL)
-		{
-			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);	exit(MEM_ERR);
-		}
+		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
 
-		newEvent->set_address(readAddress);
+		readEvent.set_address(readAddress);
 
-		eventOps->set_next(*newEvent);
-		eventOps = newEvent;
+		Address dataBlockAddress = Address(newDataBlock.get_linear_address() + i, PAGE);
+		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+		writeEvent.set_address(dataBlockAddress);
 
-		if((newEvent = new Event(WRITE, event.get_logical_address(), 1, event.get_start_time())) == NULL)
-		{
-			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__); exit(MEM_ERR);
-		}
+		readEvent.set_next(writeEvent);
 
-		Address dataBlockAddress = new Address(newDataBlock.get_linear_address() + i, PAGE);
+		controller.issue(readEvent);
 
-		newEvent->set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+		event.consolidate_metaevent(readEvent);
 
-		newEvent->set_address(dataBlockAddress);
-
-		eventOps->set_next(*newEvent);
-		eventOps = newEvent;
+		// Statistics
+		controller.stats.numFTLRead++;
+		controller.stats.numFTLWrite++;
 	}
 
-	event.get_last_event(event);
-
-	// Invalidate inactive pages
+	// Invalidate inactive pages (LOG and DATA)
 	manager.invalidate(logBlock->address, LOG);
 	if (data_list[logicalBlockAddress] != -1)
 	{
-		Address dBlock = new Address(data_list[logicalBlockAddress], BLOCK);
+		Address dBlock = Address(data_list[logicalBlockAddress], BLOCK);
 		manager.invalidate(dBlock, DATA);
 	}
 
@@ -301,54 +326,3 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 
 	return true;
 }
-
-enum status FtlImpl_Bast::write(Event &event)
-{
-	long logicalBlockAddress = (event.get_logical_address() >> addressShift);
-	Address eventAddress;
-	eventAddress.set_linear_address(event.get_logical_address());
-
-	LogPageBlock *logBlock = NULL;
-
-	if (log_map.find(logicalBlockAddress) == log_map.end())
-		allocate_new_logblock(logBlock, logicalBlockAddress, event);
-
-	logBlock = log_map[logicalBlockAddress];
-
-	block_state logBlockState = controller.get_block_state(logBlock->address);
-
-	assert(logBlockState != INACTIVE);
-
-	// Can it fit inside the existing log block. Issue the request.
-	uint numValid = controller.get_num_valid(&logBlock->address);
-	if (numValid < BLOCK_SIZE)
-	{
-		logBlock->pages[eventAddress.page] = numValid;
-
-		Address logBlockAddress = logBlock->address;
-		controller.get_free_page(logBlockAddress);
-
-		event.set_address(logBlockAddress);
-	} else {
-		if (!is_sequential(logBlock, logicalBlockAddress, event))
-			random_merge(logBlock, logicalBlockAddress, event);
-
-		allocate_new_logblock(logBlock, logicalBlockAddress, event);
-
-		// Write the current io to a new block.
-		logBlock->pages[eventAddress.page] = 0;
-		Address dataPage = logBlock->address;
-		dataPage.valid = PAGE;
-		event.set_address(dataPage);
-	}
-
-	manager.insert_events(event);
-
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
-
-	event.consolidate_metaevent(event);
-
-	return SUCCESS;
-}
-

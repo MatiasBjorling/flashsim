@@ -90,7 +90,7 @@ Plane::Plane(const Die &parent, uint plane_size, double reg_read_delay, double r
 	}
 
 	for(i = 0; i < size; i++)
-		(void) new (&data[i]) Block(*this, BLOCK_SIZE, BLOCK_ERASES, BLOCK_ERASE_DELAY, physical_address+i);
+		(void) new (&data[i]) Block(*this, BLOCK_SIZE, BLOCK_ERASES, BLOCK_ERASE_DELAY, physical_address+(i*BLOCK_SIZE));
 
 	return;
 }
@@ -346,7 +346,7 @@ void Plane::get_free_page(Address &address) const
 
 	address.page = data[address.block].get_pages_valid();
 	address.valid = PAGE;
-	address.set_linear_address(address.get_linear_address()+ address.page);
+	address.set_linear_address(address.get_linear_address()+ address.page - (address.get_linear_address()%BLOCK_SIZE));
 	return;
 }
 

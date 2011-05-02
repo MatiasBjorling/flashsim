@@ -65,12 +65,10 @@ enum status FtlImpl_Dftl::read(Event &event)
 
 	controller.stats.numFTLRead++;
 
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
+	// Insert garbage collection
+	manager.insert_events(event);
 
-	event.consolidate_metaevent(event);
-
-	return SUCCESS;
+	return controller.issue(event);
 }
 
 enum status FtlImpl_Dftl::write(Event &event)
@@ -84,17 +82,14 @@ enum status FtlImpl_Dftl::write(Event &event)
 
 	event.set_address(Address(trans_map[dlpn].ppn, PAGE));
 
+	Address a = event.get_address();
+
 	controller.stats.numFTLWrite++;
 
 	// Insert garbage collection
 	manager.insert_events(event);
 
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
-
-	event.consolidate_metaevent(event);
-
-	return SUCCESS;
+	return controller.issue(event);
 }
 
 void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)

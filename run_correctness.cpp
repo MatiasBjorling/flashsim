@@ -27,7 +27,7 @@ double do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 		if (type == READ)
 		{
 			if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)
-				fprintf(stderr, "Err. Data does not compare. i: %i\n", i);
+				fprintf(stderr, "i: %i\n", i);
 		}
 		i++;
 	}
