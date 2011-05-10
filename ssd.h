@@ -124,9 +124,14 @@ extern const uint MAP_DIRECTORY_SIZE;
 extern const uint FTL_IMPLEMENTATION;
 
 /*
+ * LOG page limit for BAST.
+ */
+extern const uint BAST_LOG_PAGE_LIMIT;
+
+/*
  * LOG page limit for FAST.
  */
-extern const uint LOG_PAGE_LIMIT;
+extern const uint FAST_LOG_PAGE_LIMIT;
 
 /*
  * Number of blocks allowed to be in DFTL Cached Mapping Table.
@@ -737,6 +742,8 @@ public:
 	enum status read(Event &event);
 	enum status write(Event &event);
 private:
+	void initialize_log_pages();
+
 	std::map<long, LogPageBlock*> log_map;
 
 	long *data_list;

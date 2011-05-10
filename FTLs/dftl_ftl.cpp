@@ -126,7 +126,7 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 			if (block->get_state(i) == VALID)
 			{
 				Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
-				Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+				Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
 				// Set up events.
 				readEvent.set_address(Address(block->get_physical_address()+i, PAGE));

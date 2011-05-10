@@ -58,20 +58,6 @@ FtlImpl_Fast::FtlImpl_Fast(Controller &controller):
 	sequential_offset = 0;
 	sequential_logicalblock_address = -1;
 
-	// RW
-	log_pages = new LogPageBlock;
-	log_pages->address = manager.get_free_block(LOG);
-
-	LogPageBlock *next = log_pages;
-	for (uint i=0;i<LOG_PAGE_LIMIT-1;i++)
-	{
-		LogPageBlock *newLPB = new LogPageBlock();
-		newLPB->address = manager.get_free_block(LOG);
-		next->next = newLPB;
-		next = newLPB;
-	}
-
-
 	log_page_next = 0;
 
 	printf("Total mapping table size: %luKB\n", numBlocks * sizeof(uint) / 1024);
@@ -87,8 +73,28 @@ FtlImpl_Fast::~FtlImpl_Fast(void)
 	return;
 }
 
+void FtlImpl_Fast::initialize_log_pages()
+{
+	if (log_pages != NULL)
+		return;
+
+	// RW
+	log_pages = new LogPageBlock;
+	log_pages->address = manager.get_free_block(LOG);
+
+	LogPageBlock *next = log_pages;
+	for (uint i=0;i<FAST_LOG_PAGE_LIMIT-1;i++)
+	{
+		LogPageBlock *newLPB = new LogPageBlock();
+		newLPB->address = manager.get_free_block(LOG);
+		next->next = newLPB;
+		next = newLPB;
+	}
+}
 enum status FtlImpl_Fast::read(Event &event)
 {
+	initialize_log_pages();
+
 	// Find block
 	long lookupBlock = (event.get_logical_address() >> addressShift);
 	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
@@ -97,6 +103,7 @@ enum status FtlImpl_Fast::read(Event &event)
 	eventAddress.set_linear_address(event.get_logical_address());
 
 	LogPageBlock *currentBlock = log_pages;
+
 	bool found = false;
 	while (!found && currentBlock != NULL)
 	{
@@ -136,8 +143,13 @@ enum status FtlImpl_Fast::read(Event &event)
 		}
 	}
 
+	printf("Reading %li\n", event.get_address().get_linear_address());
+
 	// Insert garbage collection
 	manager.insert_events(event);
+
+	// Statistics
+	controller.stats.numFTLRead++;
 
 	return controller.issue(event);
 }
@@ -150,7 +162,7 @@ void FtlImpl_Fast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlo
 		long exLogicalBlock = (*log_map.begin()).first;
 		LogPageBlock *exLogBlock = (*log_map.begin()).second;
 
-		//printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
+		printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
 
 //		if (!is_sequential(exLogBlock, exLogicalBlock, event))
 //			random_merge(exLogBlock, exLogicalBlock, event);
@@ -188,7 +200,14 @@ void FtlImpl_Fast::switch_sequential(Event &event)
 void FtlImpl_Fast::merge_sequential(Event &event)
 {
 	if (sequential_logicalblock_address == -1)
+	{
 		return;
+	}
+
+	for (int i=0;i<4;i++)
+	{
+		printf("Before Entry: %li Value: %lu\n", i, data_list[i]);
+	}
 
 	// Do merge (n reads, n writes and 2 erases (gc'ed))
 	Address eventAddress;
@@ -197,8 +216,6 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 	Address newDataBlock = manager.get_free_block(DATA);
 	//printf("Using new data block with address: %lu Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
 
-	Event *eventOps = event.get_last_event(event);
-	Event *newEvent = NULL;
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
 		// Lookup page table and see if page exist in log page
@@ -206,53 +223,45 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 
 		Address seq = Address(sequential_address.get_linear_address() + i, PAGE);
 		if (get_state(seq) == VALID)
-		{
 			readAddress = seq;
-		}
 		else if (data_list[sequential_logicalblock_address] != -1)
-		{
 			readAddress.set_linear_address(data_list[sequential_logicalblock_address] + i, PAGE);
-		}
 		else
-		{
-			printf("Empty page.\n");
-			continue;
-		}
+			continue; // Empty page
 
-		if((newEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time())) == NULL)
-		{
-			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);	exit(MEM_ERR);
-		}
+		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
-		newEvent->set_address(readAddress);
-
-		eventOps->set_next(*newEvent);
-		eventOps = newEvent;
-
-		if((newEvent = new Event(WRITE, event.get_logical_address(), 1, event.get_start_time())) == NULL)
-		{
-			fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__); exit(MEM_ERR);
-		}
+		readEvent.set_address(readAddress);
+		readEvent.set_next(writeEvent);
 
 		Address dataBlockAddress = new Address(newDataBlock.get_linear_address() + i, PAGE);
 
-		newEvent->set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+		writeEvent.set_address(dataBlockAddress);
 
-		newEvent->set_address(dataBlockAddress);
+		if (controller.issue(readEvent) == FAILURE)
+		{
+			printf("failed\n");
+			return;
+		}
 
-		eventOps->set_next(*newEvent);
-		eventOps = newEvent;
+		event.consolidate_metaevent(readEvent);
+
+		// Statistics
+		controller.stats.numFTLRead++;
+		controller.stats.numFTLWrite++;
 	}
-
-	event.get_last_event(event);
 
 	// Invalidate inactive pages
 
 	Address lBlock = Address(sequential_address);
+	printf("invalidating %li\n", lBlock.get_linear_address());
 	manager.invalidate(lBlock, LOG);
 	if (data_list[sequential_logicalblock_address] != -1)
 	{
-		Address dBlock = new Address(data_list[sequential_logicalblock_address], BLOCK);
+		Address dBlock = Address(data_list[sequential_logicalblock_address], BLOCK);
+		printf("invalidating %li\n", dBlock.get_linear_address());
 		manager.invalidate(dBlock, DATA);
 	}
 
@@ -262,7 +271,13 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 	// Add erase events if necessary.
 	manager.insert_events(event);
 
-	printf("Merge sequential\n");
+	printf("Merged sequential\n");
+
+	for (int i=0;i<4;i++)
+	{
+		printf("After Entry: %li Value: %lu\n", i, data_list[i]);
+	}
+
 }
 
 bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
@@ -279,9 +294,6 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 		mergeBlocks[victimLBA] = true;
 	}
 
-	Event *eventOps = event.get_last_event(event);
-	Event *newEvent = NULL;
-
 	bool pinned[BLOCK_SIZE];
 
 	typedef std::map<ulong, bool>::const_iterator CI;
@@ -296,7 +308,7 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 
 		long victimLBA = m->first;
 		// Find the last block and then the next last etc.
-		for (int logblockNr = LOG_PAGE_LIMIT; logblockNr > 0; logblockNr--)
+		for (int logblockNr = FAST_LOG_PAGE_LIMIT; logblockNr > 0; logblockNr--)
 		{
 			LogPageBlock *lpb = log_pages;
 			for (int i = 0;i<logblockNr-1;i++)
@@ -324,23 +336,28 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 						// Read the active log address
 						Address readAddress = Address(lpb->address.get_linear_address()+i, PAGE);
 
-						if((newEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time())) == NULL) {fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);	exit(MEM_ERR);}
+						Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+						Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
-						newEvent->set_address(readAddress);
+						readEvent.set_address(readAddress);
+						readEvent.set_next(writeEvent);
 
-						eventOps->set_next(*newEvent);
-						eventOps = newEvent;
+						writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+						writeEvent.set_address(writeAddress);
 
-						// Write the page to merge address
-						if((newEvent = new Event(WRITE, event.get_logical_address(), 1, event.get_start_time())) == NULL) {fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__); exit(MEM_ERR); }
+						if (controller.issue(readEvent) == FAILURE)
+						{
+							printf("failed\n");
+							return false;
+						}
 
-						newEvent->set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
-						newEvent->set_address(writeAddress);
-
-						eventOps->set_next(*newEvent);
-						eventOps = newEvent;
+						event.consolidate_metaevent(readEvent);
 
 						pinned[lpb->aPages[i]%BLOCK_SIZE] = true;
+
+						// Statistics
+						controller.stats.numFTLRead++;
+						controller.stats.numFTLWrite++;
 					}
 				}
 			}
@@ -357,23 +374,29 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 				Address readAddress = Address(data_list[victimLBA] + i, PAGE);
 				if (get_state(readAddress) == VALID)
 				{
-					if((newEvent = new Event(READ, event.get_logical_address(), 1, event.get_start_time())) == NULL) {fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);	exit(MEM_ERR);}
+					Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+					Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
-					newEvent->set_address(readAddress);
-
-					eventOps->set_next(*newEvent);
-					eventOps = newEvent;
+					readEvent.set_address(readAddress);
+					readEvent.set_next(writeEvent);
 
 					// Write the page to merge address
-					if((newEvent = new Event(WRITE, event.get_logical_address(), 1, event.get_start_time())) == NULL) {fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__); exit(MEM_ERR); }
+					writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+					writeEvent.set_address(writeAddress);
 
-					newEvent->set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
-					newEvent->set_address(writeAddress);
+					if (controller.issue(readEvent) == FAILURE)
+					{
+						printf("failed\n");
+						return false;
+					}
 
-					eventOps->set_next(*newEvent);
-					eventOps = newEvent;
+					event.consolidate_metaevent(readEvent);
 
 					pinned[i] = true;
+
+					// Statistics
+					controller.stats.numFTLRead++;
+					controller.stats.numFTLWrite++;
 				}
 			}
 		}
@@ -427,8 +450,8 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 		Address seq = sequential_address;
 		controller.get_free_page(seq);
 
+		printf("write address %li\n", seq.get_linear_address());
 		event.set_address(seq);
-
 	} else {
 		if (sequential_logicalblock_address == logicalBlockAddress) // If the current owner for the SW log block is the same with lbn
 		{
@@ -455,7 +478,7 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 
 			// Update the SW log block part of the sector mapping table
 		} else {
-			if (log_page_next == LOG_PAGE_LIMIT*BLOCK_SIZE) // There are no room in the RW log lock to write data
+			if (log_page_next == FAST_LOG_PAGE_LIMIT*BLOCK_SIZE) // There are no room in the RW log lock to write data
 			{
 				/*
 				 * Select the first block of the RW log block list as a victim
@@ -509,8 +532,10 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 
 enum status FtlImpl_Fast::write(Event &event)
 {
-	long logicalBlockAddress = (event.get_logical_address() >> addressShift);
-	Address eventAddress; eventAddress.set_linear_address(event.get_logical_address());
+	initialize_log_pages();
+
+	long logicalBlockAddress = event.get_logical_address() >> addressShift;
+	Address eventAddress = Address(event.get_logical_address(), PAGE);
 
 	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
 
@@ -547,10 +572,10 @@ enum status FtlImpl_Fast::write(Event &event)
 	// Add write events if necessary.
 	manager.simulate_map_write(event);
 
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
+	// Statistics
+	controller.stats.numFTLWrite++;
 
-	event.consolidate_metaevent(event);
+	printf("Writing %li\n", event.get_address().get_linear_address());
 
-	return SUCCESS;
+	return controller.issue(event);
 }

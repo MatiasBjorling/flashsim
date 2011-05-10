@@ -259,8 +259,8 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddres
 
 bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
 {
-	// Do merge (n reads, n writes and 2 erases (gc'ed))
-	/* 1. Write page to new data block
+	/* Do merge (n reads, n writes and 2 erases (gc'ed))
+	 * 1. Write page to new data block
 	 * 1a Promote new log block.
 	 * 2. Create BLOCK_SIZE reads
 	 * 3. Create BLOCK_SIZE writes
@@ -286,7 +286,7 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 			continue; // Empty page
 
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
-		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
 		readEvent.set_address(readAddress);
 

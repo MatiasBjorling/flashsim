@@ -135,6 +135,7 @@ double Event::get_start_time(void) const
 
 double Event::get_time_taken(void) const
 {
+
 	assert(time_taken >= 0.0);
 	return time_taken;
 }

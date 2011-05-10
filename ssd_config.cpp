@@ -34,7 +34,7 @@
 #include <string.h>
 
 /* using namespace ssd; */
-namespace ssd{
+namespace ssd {
 
 /* Define typedefs and error macros from ssd.h here instead of including
  * header file because we want to declare the global configuration variables
@@ -49,7 +49,6 @@ typedef unsigned long ulong;
 /* define exit codes for errors */
 #define MEM_ERR -1
 #define FILE_ERR -2
-
 
 /* Simulator configuration
  * All configuration variables are set by reading ssd.conf and referenced with
@@ -139,9 +138,15 @@ uint MAP_DIRECTORY_SIZE = 0;
 uint FTL_IMPLEMENTATION = 0;
 
 /*
+ * Limit of LOG pages (for use in BAST)
+ */
+uint BAST_LOG_PAGE_LIMIT = 100;
+
+
+/*
  * Limit of LOG pages (for use in FAST)
  */
-uint LOG_PAGE_LIMIT = 4;
+uint FAST_LOG_PAGE_LIMIT = 4;
 
 /*
  * Number of pages allowed to be in DFTL Cached Mapping Table.
@@ -150,67 +155,66 @@ uint LOG_PAGE_LIMIT = 4;
  */
 uint CACHE_DFTL_LIMIT = 8;
 
-
-void load_entry(char *name, double value, uint line_number)
-{
+void load_entry(char *name, double value, uint line_number) {
 	/* cheap implementation - go through all possibilities and match entry */
-	if(!strcmp(name, "RAM_READ_DELAY"))
+	if (!strcmp(name, "RAM_READ_DELAY"))
 		RAM_READ_DELAY = value;
-	else if(!strcmp(name, "RAM_WRITE_DELAY"))
+	else if (!strcmp(name, "RAM_WRITE_DELAY"))
 		RAM_WRITE_DELAY = value;
-	else if(!strcmp(name, "BUS_CTRL_DELAY"))
+	else if (!strcmp(name, "BUS_CTRL_DELAY"))
 		BUS_CTRL_DELAY = value;
-	else if(!strcmp(name, "BUS_DATA_DELAY"))
+	else if (!strcmp(name, "BUS_DATA_DELAY"))
 		BUS_DATA_DELAY = value;
-	else if(!strcmp(name, "BUS_MAX_CONNECT"))
+	else if (!strcmp(name, "BUS_MAX_CONNECT"))
 		BUS_MAX_CONNECT = (uint) value;
-	else if(!strcmp(name, "BUS_TABLE_SIZE"))
+	else if (!strcmp(name, "BUS_TABLE_SIZE"))
 		BUS_TABLE_SIZE = (uint) value;
-	else if(!strcmp(name, "SSD_SIZE"))
+	else if (!strcmp(name, "SSD_SIZE"))
 		SSD_SIZE = (uint) value;
-	else if(!strcmp(name, "PACKAGE_SIZE"))
+	else if (!strcmp(name, "PACKAGE_SIZE"))
 		PACKAGE_SIZE = (uint) value;
-	else if(!strcmp(name, "DIE_SIZE"))
+	else if (!strcmp(name, "DIE_SIZE"))
 		DIE_SIZE = (uint) value;
-	else if(!strcmp(name, "PLANE_SIZE"))
+	else if (!strcmp(name, "PLANE_SIZE"))
 		PLANE_SIZE = (uint) value;
-	else if(!strcmp(name, "PLANE_REG_READ_DELAY"))
+	else if (!strcmp(name, "PLANE_REG_READ_DELAY"))
 		PLANE_REG_READ_DELAY = value;
-	else if(!strcmp(name, "PLANE_REG_WRITE_DELAY"))
+	else if (!strcmp(name, "PLANE_REG_WRITE_DELAY"))
 		PLANE_REG_WRITE_DELAY = value;
-	else if(!strcmp(name, "BLOCK_SIZE"))
+	else if (!strcmp(name, "BLOCK_SIZE"))
 		BLOCK_SIZE = (uint) value;
-	else if(!strcmp(name, "BLOCK_ERASES"))
+	else if (!strcmp(name, "BLOCK_ERASES"))
 		BLOCK_ERASES = (uint) value;
-	else if(!strcmp(name, "BLOCK_ERASE_DELAY"))
+	else if (!strcmp(name, "BLOCK_ERASE_DELAY"))
 		BLOCK_ERASE_DELAY = value;
-	else if(!strcmp(name, "PAGE_READ_DELAY"))
+	else if (!strcmp(name, "PAGE_READ_DELAY"))
 		PAGE_READ_DELAY = value;
-	else if(!strcmp(name, "PAGE_WRITE_DELAY"))
+	else if (!strcmp(name, "PAGE_WRITE_DELAY"))
 		PAGE_WRITE_DELAY = value;
-	else if(!strcmp(name, "PAGE_SIZE"))
+	else if (!strcmp(name, "PAGE_SIZE"))
 		PAGE_SIZE = value;
-	else if(!strcmp(name, "PAGE_MAX_LOG"))
+	else if (!strcmp(name, "PAGE_MAX_LOG"))
 		PAGE_MAX_LOG = value;
-	else if(!strcmp(name, "FTL_IMPLEMENTATION"))
+	else if (!strcmp(name, "FTL_IMPLEMENTATION"))
 		FTL_IMPLEMENTATION = value;
-	else if(!strcmp(name, "PAGE_ENABLE_DATA"))
+	else if (!strcmp(name, "PAGE_ENABLE_DATA"))
 		PAGE_ENABLE_DATA = (value == 1);
-	else if(!strcmp(name, "MAP_DIRECTORY_SIZE"))
+	else if (!strcmp(name, "MAP_DIRECTORY_SIZE"))
 		MAP_DIRECTORY_SIZE = value;
-	else if(!strcmp(name, "FTL_IMPLEMENTATION"))
+	else if (!strcmp(name, "FTL_IMPLEMENTATION"))
 		FTL_IMPLEMENTATION = value;
-	else if(!strcmp(name, "LOG_PAGE_LIMIT"))
-		LOG_PAGE_LIMIT = value;
-	else if(!strcmp(name, "CACHE_DFTL_LIMIT"))
+	else if (!strcmp(name, "BAST_LOG_PAGE_LIMIT"))
+		BAST_LOG_PAGE_LIMIT = value;
+	else if (!strcmp(name, "FAST_LOG_PAGE_LIMIT"))
+		FAST_LOG_PAGE_LIMIT = value;
+	else if (!strcmp(name, "CACHE_DFTL_LIMIT"))
 		CACHE_DFTL_LIMIT = value;
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;
 }
 
-void load_config(void)
-{
+void load_config(void) {
 	const char * const config_name = "ssd.conf";
 	FILE *config_file = NULL;
 
@@ -222,36 +226,32 @@ void load_config(void)
 	char name[line_size];
 	double value;
 
-	if((config_file = fopen(config_name, "r")) == NULL)
-	{
+	if ((config_file = fopen(config_name, "r")) == NULL) {
 		fprintf(stderr, "Config file %s not found.  Exiting.\n", config_name);
 		exit(FILE_ERR);
 	}
 
-	for(line_number = 1; fgets(line, line_size, config_file) != NULL; line_number++)
-	{
+	for (line_number = 1; fgets(line, line_size, config_file) != NULL; line_number++) {
 		line[line_size - 1] = '\0';
 
 		/* ignore comments and blank lines */
-		if(line[0] == '#' || line[0] == '\n')
+		if (line[0] == '#' || line[0] == '\n')
 			continue;
 
 		/* read lines with entries (name value) */
-		if(sscanf(line, "%127s %lf", name, &value) == 2)
-		{
+		if (sscanf(line, "%127s %lf", name, &value) == 2) {
 			name[line_size - 1] = '\0';
 			load_entry(name, value, line_number);
-		}
-		else
-			fprintf(stderr, "Config file parsing error on line %u\n", line_number);
+		} else
+			fprintf(stderr, "Config file parsing error on line %u\n",
+					line_number);
 	}
 	fclose(config_file);
 	return;
 }
 
-void print_config(FILE *stream)
-{
-	if(stream == NULL)
+void print_config(FILE *stream) {
+	if (stream == NULL)
 		stream = stdout;
 	fprintf(stream, "RAM_READ_DELAY: %.16lf\n", RAM_READ_DELAY);
 	fprintf(stream, "RAM_WRITE_DELAY: %.16lf\n", RAM_WRITE_DELAY);

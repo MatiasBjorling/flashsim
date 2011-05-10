@@ -28,7 +28,7 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE - MAP_DIRECTORY_SIZE;
 
 	if (FTL_IMPLEMENTATION == IMPL_FAST) // FAST
-		max_log_blocks = LOG_PAGE_LIMIT;
+		max_log_blocks = FAST_LOG_PAGE_LIMIT;
 	else
 		max_log_blocks = max_blocks;
 
@@ -160,7 +160,7 @@ void Block_manager::insert_events(Event &event)
 	// First step and least expensive it to go though invalid list.
 	while (num_to_erase != 0 && invalid_list.size() != 0)
 	{
-		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
+		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
 		Address address = new Address(invalid_list.back()->get_physical_address(), BLOCK);
 
@@ -192,7 +192,7 @@ void Block_manager::insert_events(Event &event)
 		ftl.cleanup_block(event, blockErase);
 
 		// Create erase event and attach to current event queue.
-		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
+		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 		Address address = Address(blockErase->get_physical_address(), BLOCK);
 		printf("1Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
 		erase_event.set_address(address);
@@ -238,8 +238,8 @@ Address Block_manager::get_free_block(block_type type)
 void Block_manager::simulate_map_write(Event &events)
 {
 	return;
-	Event eraseEvent = Event(ERASE, events.get_logical_address(), 1, events.get_start_time());
-	Event writeEvent = Event(WRITE, events.get_logical_address(), 1, events.get_start_time());
+	Event eraseEvent = Event(ERASE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
+	Event writeEvent = Event(WRITE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
 
 	writeEvent.set_address(Address(map_offset + directoryCurrentPage, PAGE));
 
@@ -274,7 +274,7 @@ void Block_manager::simulate_map_read(Event &events)
 	ulong inside_block = events.get_address().get_linear_address() / BLOCK_SIZE;
 	if (!(directoryCachedPage >= inside_block && (directoryCachedPage + map_space_capacity) > inside_block))
 	{
-		Event readEvent = Event(READ, events.get_logical_address(), 1, events.get_start_time());
+		Event readEvent = Event(READ, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
 		readEvent.set_address(events.get_address());
 		readEvent.set_noop(true);
 
