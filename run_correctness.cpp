@@ -13,7 +13,7 @@
 
 using namespace ssd;
 
-#define GARBAGEPATH "/home/silverwolf/workspace/randomgarbagesmall"
+#define GARBAGEPATH "/home/silverwolf/workspace/randomgarbage3"
 
 double do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 {
@@ -104,52 +104,52 @@ int main()
 
 	double result = 0;
 
-//	printf("Test 1. Write sequential test data.\n");
-//	result += do_seq(ssd, WRITE, test_data, st.st_size);
-
-//	printf("Test 1. Write sequential test data.\n");
-//	result += do_seq(ssd, WRITE, test_data, st.st_size);
+	printf("Test 1. Write sequential test data.\n");
+	result += do_seq(ssd, WRITE, test_data, st.st_size);
 
 	printf("Test 1. Write sequential test data.\n");
 	result += do_seq(ssd, WRITE, test_data, st.st_size);
 
-//	printf("Test 1. Write sequential test data.\n");
-//	result += do_seq(ssd, WRITE, test_data, st.st_size);
-//
-//	printf("Test 1. Write sequential test data.\n");
-//	result += do_seq(ssd, WRITE, test_data, st.st_size);
+	printf("Test 1. Write sequential test data.\n");
+	result += do_seq(ssd, WRITE, test_data, st.st_size);
 
-//	printf("Test 2. Read sequential test data.\n");
-//	result += do_seq(ssd, READ, test_data, st.st_size);
+	printf("Test 1. Write sequential test data.\n");
+	result += do_seq(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 1. Write sequential test data.\n");
+	result += do_seq(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 2. Read sequential test data.\n");
+	result += do_seq(ssd, READ, test_data, st.st_size);
 
 	printf("Test 6. Write backward sequential test data.\n");
 	result += do_seq_backward(ssd, WRITE, test_data, st.st_size);
 
-//	printf("Test 9. Read backward sequential test data.\n");
-//	result += do_seq_backward(ssd, READ, test_data, st.st_size);
+	printf("Test 9. Read backward sequential test data.\n");
+	result += do_seq_backward(ssd, READ, test_data, st.st_size);
 
-//	printf("Test 3. Write second write.\n");
-//	result += do_seq(ssd, WRITE, test_data, st.st_size);
+	printf("Test 3. Write second write.\n");
+	result += do_seq(ssd, WRITE, test_data, st.st_size);
 
-//	printf("Test 4. Write third write.\n");
-//	result += do_seq(ssd, WRITE, test_data, st.st_size);
+	printf("Test 4. Write third write.\n");
+	result += do_seq_backward(ssd, WRITE, test_data, st.st_size);
 
 	printf("Test 5. Read sequential test data.\n");
-	result += do_seq(ssd, READ, test_data, st.st_size);
-//
-//	printf("Test 6. Write backward sequential test data.\n");
-//	result += do_seq_backward(ssd, WRITE, test_data, st.st_size);
-//
-//	printf("Test 7. Read backward sequential test data.\n");
-//	result += do_seq_backward(ssd, READ, test_data, st.st_size);
-//
-//	printf("Test 8. Write backward sequential test data again.\n");
-//	result += do_seq_backward(ssd, WRITE, test_data, st.st_size);
-//
-//	printf("Test 9. Read backward sequential test data.\n");
-//	result += do_seq_backward(ssd, READ, test_data, st.st_size);
+	result += do_seq_backward(ssd, READ, test_data, st.st_size);
 
-	printf("Write time: %.10lfs\n", result/1000000);
+	printf("Test 6. Write backward sequential test data.\n");
+	result += do_seq_backward(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 7. Read backward sequential test data.\n");
+	result += do_seq_backward(ssd, READ, test_data, st.st_size);
+
+	printf("Test 8. Write backward sequential test data again.\n");
+	result += do_seq_backward(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 9. Read backward sequential test data.\n");
+	result += do_seq_backward(ssd, READ, test_data, st.st_size);
+
+	printf("Write time: %.10lfs\n", result);
 
 	ssd->print_statistics();
 	delete ssd;

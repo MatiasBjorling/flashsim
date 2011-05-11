@@ -120,8 +120,6 @@ double PAGE_WRITE_DELAY = 0.00001;
 uint PAGE_SIZE = 4096;
 bool PAGE_ENABLE_DATA = true;
 
-uint PAGE_MAX_LOG = 10;
-
 /*
  * Memory area to support pages with data.
  */
@@ -193,8 +191,6 @@ void load_entry(char *name, double value, uint line_number) {
 		PAGE_WRITE_DELAY = value;
 	else if (!strcmp(name, "PAGE_SIZE"))
 		PAGE_SIZE = value;
-	else if (!strcmp(name, "PAGE_MAX_LOG"))
-		PAGE_MAX_LOG = value;
 	else if (!strcmp(name, "FTL_IMPLEMENTATION"))
 		FTL_IMPLEMENTATION = value;
 	else if (!strcmp(name, "PAGE_ENABLE_DATA"))

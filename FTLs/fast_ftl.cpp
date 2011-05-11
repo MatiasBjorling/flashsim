@@ -143,7 +143,7 @@ enum status FtlImpl_Fast::read(Event &event)
 		}
 	}
 
-	printf("Reading %li\n", event.get_address().get_linear_address());
+	//printf("Reading %li for %lu\n", event.get_address().get_linear_address(), event.get_logical_address());
 
 	// Insert garbage collection
 	manager.insert_events(event);
@@ -157,7 +157,7 @@ enum status FtlImpl_Fast::read(Event &event)
 
 void FtlImpl_Fast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
 {
-	if (log_map.size() >= PAGE_MAX_LOG)
+	if (log_map.size() >= FAST_LOG_PAGE_LIMIT)
 	{
 		long exLogicalBlock = (*log_map.begin()).first;
 		LogPageBlock *exLogBlock = (*log_map.begin()).second;
@@ -187,12 +187,13 @@ void FtlImpl_Fast::switch_sequential(Event &event)
 
 	if (data_list[sequential_logicalblock_address] != -1)
 	{
-		Address a;
-		a.set_linear_address(data_list[sequential_logicalblock_address], BLOCK);
+		Address a = Address(data_list[sequential_logicalblock_address], BLOCK);
 		manager.invalidate(a, DATA);
 	}
 
 	data_list[sequential_logicalblock_address] = sequential_address.get_linear_address();
+
+	controller.stats.numLogMergeSwitch++;
 
 	printf("Switch sequential\n");
 }
@@ -200,14 +201,7 @@ void FtlImpl_Fast::switch_sequential(Event &event)
 void FtlImpl_Fast::merge_sequential(Event &event)
 {
 	if (sequential_logicalblock_address == -1)
-	{
 		return;
-	}
-
-	for (int i=0;i<4;i++)
-	{
-		printf("Before Entry: %li Value: %lu\n", i, data_list[i]);
-	}
 
 	// Do merge (n reads, n writes and 2 erases (gc'ed))
 	Address eventAddress;
@@ -224,7 +218,7 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 		Address seq = Address(sequential_address.get_linear_address() + i, PAGE);
 		if (get_state(seq) == VALID)
 			readAddress = seq;
-		else if (data_list[sequential_logicalblock_address] != -1)
+		else if (data_list[sequential_logicalblock_address] != -1 && get_state(Address(data_list[sequential_logicalblock_address] + i, PAGE)) == VALID)
 			readAddress.set_linear_address(data_list[sequential_logicalblock_address] + i, PAGE);
 		else
 			continue; // Empty page
@@ -235,10 +229,10 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 		readEvent.set_address(readAddress);
 		readEvent.set_next(writeEvent);
 
-		Address dataBlockAddress = new Address(newDataBlock.get_linear_address() + i, PAGE);
-
 		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
-		writeEvent.set_address(dataBlockAddress);
+		writeEvent.set_address(Address(newDataBlock.get_linear_address() + i, PAGE));
+
+		//printf("Merge. Writing %lu to %lu\n", readAddress.get_linear_address(), writeEvent.get_address().get_linear_address());
 
 		if (controller.issue(readEvent) == FAILURE)
 		{
@@ -256,14 +250,14 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 	// Invalidate inactive pages
 
 	Address lBlock = Address(sequential_address);
-	printf("invalidating %li\n", lBlock.get_linear_address());
 	manager.invalidate(lBlock, LOG);
 	if (data_list[sequential_logicalblock_address] != -1)
 	{
 		Address dBlock = Address(data_list[sequential_logicalblock_address], BLOCK);
-		printf("invalidating %li\n", dBlock.get_linear_address());
 		manager.invalidate(dBlock, DATA);
 	}
+
+	//printf("Moving %lu to %lu\n", sequential_logicalblock_address, newDataBlock.get_linear_address());
 
 	// Update mapping
 	data_list[sequential_logicalblock_address] = newDataBlock.get_linear_address();
@@ -271,12 +265,9 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 	// Add erase events if necessary.
 	manager.insert_events(event);
 
-	printf("Merged sequential\n");
+	controller.stats.numLogMergeFull++;
 
-	for (int i=0;i<4;i++)
-	{
-		printf("After Entry: %li Value: %lu\n", i, data_list[i]);
-	}
+	printf("Merged sequential\n");
 
 }
 
@@ -412,6 +403,8 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 
 	std::cout << "Finished.\n";
 
+	controller.stats.numLogMergeFull++;
+
 	// Add erase events if necessary.
 	manager.insert_events(event);
 
@@ -450,7 +443,6 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 		Address seq = sequential_address;
 		controller.get_free_page(seq);
 
-		printf("write address %li\n", seq.get_linear_address());
 		event.set_address(seq);
 	} else {
 		if (sequential_logicalblock_address == logicalBlockAddress) // If the current owner for the SW log block is the same with lbn
@@ -575,7 +567,7 @@ enum status FtlImpl_Fast::write(Event &event)
 	// Statistics
 	controller.stats.numFTLWrite++;
 
-	printf("Writing %li\n", event.get_address().get_linear_address());
+	//printf("Writing %li for %lu\n", event.get_address().get_linear_address(), event.get_logical_address());
 
 	return controller.issue(event);
 }

@@ -138,7 +138,6 @@ void Block_manager::insert_events(Event &event)
 	//print_statistics();
 
 	// Calculate if GC should be activated.
-
 	float used;
 	if (FTL_IMPLEMENTATION >= 3)
 	{
@@ -151,11 +150,10 @@ void Block_manager::insert_events(Event &event)
 	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
 	float ratio = used/total;
 
-	//printf("ratio: %f\n", ratio);
-	if (ratio < 0.7)
+	if (ratio < 0.7) // Magic
 		return;
 
-	uint num_to_erase = 50; // Magic number
+	uint num_to_erase = 50; // More Magic
 
 	// First step and least expensive it to go though invalid list.
 	while (num_to_erase != 0 && invalid_list.size() != 0)
@@ -194,7 +192,7 @@ void Block_manager::insert_events(Event &event)
 		// Create erase event and attach to current event queue.
 		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 		Address address = Address(blockErase->get_physical_address(), BLOCK);
-		printf("1Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
+		printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
 		erase_event.set_address(address);
 
 		free_list.push_back(blockErase);

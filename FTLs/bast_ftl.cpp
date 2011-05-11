@@ -115,38 +115,30 @@ enum status FtlImpl_Bast::read(Event &event)
 	if (log_map.find(lookupBlock) != log_map.end())
 		logBlock = log_map[lookupBlock];
 
-	if (data_list[lookupBlock] == -1 && logBlock != NULL && logBlock->pages[eventAddress.page] == -1)
-	{
-		event.set_address(Address(0, PAGE));
-		fprintf(stderr, "Page read not written. Logical Address: %li\n", event.get_logical_address());
-		return FAILURE;
-	}
-
-	// Statistics
-	controller.stats.numFTLRead++;
+	controller.stats.numMemoryRead++;
 
 	// If page is in the log block
 	if (logBlock != NULL && logBlock->pages[eventAddress.page] != -1)
 	{
 		Address returnAddress = Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
 		event.set_address(returnAddress);
-
-		manager.simulate_map_read(event);
-		printf("Reading: ");
-		returnAddress.print(stdout);
-		printf("\n");
-		return controller.issue(event);
+	}
+	else  if (data_list[lookupBlock] == -1 && logBlock != NULL && logBlock->pages[eventAddress.page] == -1) // If page is in the data block
+	{
+		event.set_address(Address(0, PAGE));
+		fprintf(stderr, "Page has not been written. Logical Address: %li\n", event.get_logical_address());
 	} else {
-		// If page is in the data block
 		Address returnAddress = Address(data_list[lookupBlock]+ event.get_logical_address() % BLOCK_SIZE , PAGE);
 		event.set_address(returnAddress);
-
-		manager.simulate_map_read(event);
-
-		return controller.issue(event);
 	}
 
-	return FAILURE;
+	manager.simulate_map_read(event);
+	manager.insert_events(event);
+
+	// Statistics
+	controller.stats.numFTLRead++;
+
+	return controller.issue(event);
 }
 
 enum status FtlImpl_Bast::write(Event &event)
@@ -156,10 +148,10 @@ enum status FtlImpl_Bast::write(Event &event)
 	Address eventAddress;
 	eventAddress.set_linear_address(event.get_logical_address());
 
-
-
 	if (log_map.find(lba) == log_map.end())
 		allocate_new_logblock(logBlock, lba, event);
+
+	controller.stats.numMemoryRead++;
 
 	logBlock = log_map[lba];
 
@@ -198,7 +190,7 @@ enum status FtlImpl_Bast::write(Event &event)
 
 void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
 {
-	if (log_map.size() >= PAGE_MAX_LOG)
+	if (log_map.size() >= BAST_LOG_PAGE_LIMIT)
 	{
 		long exLogicalBlock = (*log_map.begin()).first;
 		LogPageBlock *exLogBlock = (*log_map.begin()).second;
@@ -230,11 +222,13 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddres
 	// Is block switch possible? i.e. log block switch
 	bool isSequential = true;
 	for (uint i=0;i<BLOCK_SIZE;i++)
+	{
 		if (logBlock->pages[i] != i)
 		{
 			isSequential = false;
 			break;
 		}
+	}
 
 	if (isSequential)
 	{
@@ -252,6 +246,8 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddres
 		dispose_logblock(logBlock, logicalBlockAddress);
 
 		manager.simulate_map_write(event);
+
+		controller.stats.numLogMergeSwitch++;
 	}
 
 	return isSequential;
@@ -324,5 +320,6 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 
 	dispose_logblock(logBlock, logicalBlockAddress);
 
+	controller.stats.numLogMergeFull++;
 	return true;
 }

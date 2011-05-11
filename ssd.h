@@ -111,7 +111,6 @@ extern const double PAGE_READ_DELAY;
 extern const double PAGE_WRITE_DELAY;
 extern const uint PAGE_SIZE;
 extern const bool PAGE_ENABLE_DATA;
-extern const uint PAGE_MAX_LOG;
 
 /*
  * Mapping directory
