@@ -93,6 +93,11 @@ enum status FtlImpl_Page::write(Event &event)
 	return SUCCESS;
 }
 
+enum status FtlImpl_Page::trim(Event &event)
+{
+	return SUCCESS;
+}
+
 inline Address FtlImpl_Page::resolve_logical_address(uint logicalAddress)
 {
 	uint numCells = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;

@@ -166,7 +166,6 @@ enum status FtlImpl_Bast::write(Event &event)
 		controller.get_free_page(logBlockAddress);
 		event.set_address(logBlockAddress);
 	} else {
-
 		if (!is_sequential(logBlock, lba, event))
 			random_merge(logBlock, lba, event);
 
@@ -185,6 +184,11 @@ enum status FtlImpl_Bast::write(Event &event)
 	controller.stats.numFTLWrite++;
 
 	return controller.issue(event);
+}
+
+enum status FtlImpl_Bast::trim(Event &event)
+{
+	return SUCCESS;
 }
 
 

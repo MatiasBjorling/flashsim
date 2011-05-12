@@ -143,7 +143,10 @@ bool FtlImpl_DftlParent::lookup_CMT(long dlpn, Event &event)
 long FtlImpl_DftlParent::get_free_translation_page()
 {
 	if (currentTranslationPage == -1 || currentTranslationPage % BLOCK_SIZE == BLOCK_SIZE -1)
+	{
 		currentTranslationPage = manager.get_free_block(LOG).get_linear_address();
+	}
+
 	else
 		currentTranslationPage++;
 

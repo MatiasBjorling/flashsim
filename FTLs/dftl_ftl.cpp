@@ -82,14 +82,17 @@ enum status FtlImpl_Dftl::write(Event &event)
 
 	event.set_address(Address(trans_map[dlpn].ppn, PAGE));
 
-	Address a = event.get_address();
-
 	controller.stats.numFTLWrite++;
 
 	// Insert garbage collection
 	manager.insert_events(event);
 
 	return controller.issue(event);
+}
+
+enum status FtlImpl_Dftl::trim(Event &event)
+{
+	return SUCCESS;
 }
 
 void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
@@ -140,6 +143,8 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 				writeEvent.set_address(dataBlockAddress);
 				writeEvent.set_replace_address(Address(block->get_physical_address()+i, PAGE));
 
+				printf("Write address %i to %i\n", readEvent.get_address().get_linear_address(), writeEvent.get_address().get_linear_address());
+
 				// Update GTD (A reverse map is much better. But not implemented at this moment. Maybe I do it later.
 				long dataPpn = dataBlockAddress.get_linear_address();
 				for (uint j=0;j<SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;j++)
@@ -164,7 +169,7 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 			}
 		}
 
-		printf("GCed %u valid data pages.\n", cnt);
+		printf("GCed %u valid data pages from %i to %i.\n", cnt);
 
 		/*
 		 * Perform batch update on the marked translation pages

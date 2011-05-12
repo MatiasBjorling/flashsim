@@ -88,15 +88,19 @@ enum status Page::_read(Event &event)
 enum status Page::_write(Event &event)
 {
 	assert(write_delay >= 0.0);
-	assert(state == EMPTY);
 
 	event.incr_time_taken(write_delay);
-	state = VALID;
+
 	if (PAGE_ENABLE_DATA && event.get_payload() != NULL && event.get_noop() == false)
 	{
+		assert(state == EMPTY);
 		void *data = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
 		memcpy (data, event.get_payload(), PAGE_SIZE);
 	}
+
+	if (event.get_noop() == false)
+		state = VALID;
+
 	return SUCCESS;
 
 }

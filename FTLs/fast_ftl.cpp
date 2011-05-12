@@ -155,6 +155,59 @@ enum status FtlImpl_Fast::read(Event &event)
 }
 
 
+
+enum status FtlImpl_Fast::write(Event &event)
+{
+	initialize_log_pages();
+
+	long logicalBlockAddress = event.get_logical_address() >> addressShift;
+	Address eventAddress = Address(event.get_logical_address(), PAGE);
+
+	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
+
+	// if a collision occurs at offset of the data block of pbn.
+	if (data_list[logicalBlockAddress] == -1)
+	{
+		Address newBlock = manager.get_free_block(DATA);
+
+		// Register the mapping
+		data_list[logicalBlockAddress] = newBlock.get_linear_address();
+
+		// Store it in the right offset and save to event
+		newBlock += lbnOffset;
+		newBlock.valid = PAGE;
+
+		event.set_address(newBlock);
+	} else {
+
+		Address dataAddress = Address(data_list[logicalBlockAddress]+lbnOffset, PAGE);
+
+		if (get_state(dataAddress) == EMPTY)
+			event.set_address(dataAddress);
+		else
+			write_to_log_block(event, logicalBlockAddress);
+	}
+
+	// Insert garbage collection
+	manager.insert_events(event);
+
+	// Add write events if necessary.
+	manager.simulate_map_write(event);
+
+	// Statistics
+	controller.stats.numFTLWrite++;
+
+	//printf("Writing %li for %lu\n", event.get_address().get_linear_address(), event.get_logical_address());
+
+	return controller.issue(event);
+}
+
+enum status FtlImpl_Fast::trim(Event &event)
+{
+	return SUCCESS;
+}
+
+
 void FtlImpl_Fast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
 {
 	if (log_map.size() >= FAST_LOG_PAGE_LIMIT)
@@ -195,7 +248,7 @@ void FtlImpl_Fast::switch_sequential(Event &event)
 
 	controller.stats.numLogMergeSwitch++;
 
-	printf("Switch sequential\n");
+	//printf("Switch sequential\n");
 }
 
 void FtlImpl_Fast::merge_sequential(Event &event)
@@ -521,53 +574,3 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 }
 
 
-
-enum status FtlImpl_Fast::write(Event &event)
-{
-	initialize_log_pages();
-
-	long logicalBlockAddress = event.get_logical_address() >> addressShift;
-	Address eventAddress = Address(event.get_logical_address(), PAGE);
-
-	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
-
-	// if a collision occurs at offset of the data block of pbn.
-	if (data_list[logicalBlockAddress] == -1)
-	{
-		Address newBlock = manager.get_free_block(DATA);
-
-		// Register the mapping
-		data_list[logicalBlockAddress] = newBlock.get_linear_address();
-
-		// Store it in the right offset and save to event
-		newBlock += lbnOffset;
-		newBlock.valid = PAGE;
-
-		event.set_address(newBlock);
-	} else {
-
-		Address dataAddress = Address(data_list[logicalBlockAddress]+lbnOffset, PAGE);
-
-		if (get_state(dataAddress) == EMPTY)
-		{
-			event.set_address(dataAddress);
-		}
-		else
-		{
-			write_to_log_block(event, logicalBlockAddress);
-		}
-	}
-
-	// Insert garbage collection
-	manager.insert_events(event);
-
-	// Add write events if necessary.
-	manager.simulate_map_write(event);
-
-	// Statistics
-	controller.stats.numFTLWrite++;
-
-	//printf("Writing %li for %lu\n", event.get_address().get_linear_address(), event.get_logical_address());
-
-	return controller.issue(event);
-}

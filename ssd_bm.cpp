@@ -33,7 +33,7 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 		max_log_blocks = max_blocks;
 
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
-	map_offset = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE*BLOCK_SIZE-max_map_pages;
+	map_offset = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE*BLOCK_SIZE - max_map_pages;
 
 	map_space_capacity = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE / (SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE * 32 / 8 / PAGE_SIZE);
 
@@ -129,6 +129,21 @@ void Block_manager::invalidate(Address &address, block_type type)
 	}
 }
 
+bool Block_manager::block_comparitor (Block const *x,Block const *y) {
+	// We assumme we have to read all pages to write out valid pages. (therefore 1+u) else (1-u)
+	// cost/benefit = (age * (1+u)) / 2u
+
+	float ratio1 = ((BLOCK_SIZE - x->get_pages_valid()) + x->get_pages_invalid()) / BLOCK_SIZE;
+	float ratio2 = ((BLOCK_SIZE - y->get_pages_valid()) + y->get_pages_invalid()) / BLOCK_SIZE;
+
+	double bc1 = (x->get_modification_time() * 1+ratio1) / (1+(2*ratio1));
+	double bc2 = (y->get_modification_time() * 1+ratio2) / (1+(2*ratio2));
+
+//	printf("la: %f %f\n", (x->get_modification_time() * 1+ratio1) , (2*ratio1)+1);
+//	printf("bc1: %f bc2: %f\n", bc1, bc2);
+	return bc1 < bc2;
+}
+
 /*
  * Insert erase events into the event stream.
  * The strategy is to clean up all invalid pages instantly.
@@ -150,7 +165,7 @@ void Block_manager::insert_events(Event &event)
 	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
 	float ratio = used/total;
 
-	if (ratio < 0.7) // Magic
+	if (ratio < 0.9) // Magic
 		return;
 
 	uint num_to_erase = 50; // More Magic
@@ -177,11 +192,12 @@ void Block_manager::insert_events(Event &event)
 		ftl.controller.stats.numFTLErase++;
 	}
 
+	printf("num of free pages: %i num of active pages: %i\n ", (int)free_list.size(), (int)active_list.size());
 	// Then go though the active blocks via the priority queue of active pages.
 	// We limit it to page-mapping algorithms.
 	while (num_to_erase != 0 && active_list.size() != 0)
 	{
-		std::sort(active_list.rbegin(), active_list.rend());
+		std::sort(active_list.rbegin(), active_list.rend(), & block_comparitor);
 
 		Block *blockErase = active_list.back();
 		active_list.pop_back();
@@ -199,6 +215,7 @@ void Block_manager::insert_events(Event &event)
 
 		// Execute erase
 		ftl.controller.issue(erase_event);
+
 		event.consolidate_metaevent(erase_event);
 
 		num_to_erase--;
@@ -235,7 +252,6 @@ Address Block_manager::get_free_block(block_type type)
 
 void Block_manager::simulate_map_write(Event &events)
 {
-	return;
 	Event eraseEvent = Event(ERASE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
 	Event writeEvent = Event(WRITE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
 
@@ -268,7 +284,6 @@ void Block_manager::simulate_map_write(Event &events)
 }
 void Block_manager::simulate_map_read(Event &events)
 {
-	return;
 	ulong inside_block = events.get_address().get_linear_address() / BLOCK_SIZE;
 	if (!(directoryCachedPage >= inside_block && (directoryCachedPage + map_space_capacity) > inside_block))
 	{

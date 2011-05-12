@@ -165,7 +165,7 @@ enum block_state{FREE, ACTIVE, INACTIVE};
  * 	                                page states set to empty)
  * 	merge - move valid pages from block at address (page state set to invalid)
  * 	           to free pages in block at merge_address */
-enum event_type{READ, WRITE, ERASE, MERGE};
+enum event_type{READ, WRITE, ERASE, MERGE, TRIM};
 
 /* General return status
  * return status for simulator operations that only need to provide general
@@ -470,7 +470,6 @@ public:
 	void invalidate_page(uint page);
 	long get_physical_address(void) const;
 	Block *get_pointer(void);
-	bool operator< (const Block& x) const;
 	block_type get_block_type(void) const;
 	void set_block_type(block_type value);
 private:
@@ -637,6 +636,7 @@ public:
 	void simulate_map_read(Event &events);
 private:
 	void get_page_block(Address &address);
+	static bool block_comparitor (Block const *x,Block const *y);
 
 	FtlParent &ftl;
 
@@ -677,6 +677,7 @@ public:
 	virtual ~FtlParent () {};
 	virtual enum status read(Event &event) = 0;
 	virtual enum status write(Event &event) = 0;
+	virtual enum status trim(Event &event) = 0;
 	virtual void cleanup_block(Event &event, Block *block);
 
 
@@ -704,6 +705,7 @@ public:
 	~FtlImpl_Page();
 	enum status read(Event &event);
 	enum status write(Event &event);
+	enum status trim(Event &event);
 private:
 	Address resolve_logical_address(uint logicalAddress);
 
@@ -718,6 +720,7 @@ public:
 	~FtlImpl_Bast();
 	enum status read(Event &event);
 	enum status write(Event &event);
+	enum status trim(Event &event);
 private:
 	std::map<long, LogPageBlock*> log_map;
 
@@ -740,6 +743,7 @@ public:
 	~FtlImpl_Fast();
 	enum status read(Event &event);
 	enum status write(Event &event);
+	enum status trim(Event &event);
 private:
 	void initialize_log_pages();
 
@@ -774,6 +778,7 @@ public:
 	~FtlImpl_DftlParent();
 	virtual enum status read(Event &event) = 0;
 	virtual enum status write(Event &event) = 0;
+	virtual enum status trim(Event &event) = 0;
 protected:
 	struct MPage {
 		long vpn;
@@ -817,6 +822,7 @@ public:
 	~FtlImpl_Dftl();
 	enum status read(Event &event);
 	enum status write(Event &event);
+	enum status trim(Event &event);
 	void cleanup_block(Event &event, Block *block);
 };
 
@@ -827,6 +833,7 @@ public:
 	~FtlImpl_BDftl();
 	enum status read(Event &event);
 	enum status write(Event &event);
+	enum status trim(Event &event);
 	void cleanup_block(Event &event, Block *block);
 private:
 	struct BPage {

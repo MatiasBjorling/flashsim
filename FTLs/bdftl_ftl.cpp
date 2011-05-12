@@ -182,6 +182,11 @@ enum status FtlImpl_BDftl::write(Event &event)
 	return SUCCESS;
 }
 
+enum status FtlImpl_BDftl::trim(Event &event)
+{
+	return SUCCESS;
+}
+
 void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 {
 	return;
