@@ -40,6 +40,7 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 	pages_valid(0),
 	pages_invalid(0),
 	state(FREE),
+	modification_time(-1),
 
 	/* set erases remaining to BLOCK_ERASES to match Block constructor args 
 	 * in Plane class
@@ -100,8 +101,12 @@ enum status Block::write(Event &event)
 {
 	assert(data != NULL);
 	enum status ret = data[event.get_address().page]._write(event);
-	if(ret == SUCCESS)
+	if(ret == SUCCESS && event.get_noop() == false)
 	{
+
+		if (event.get_replace_address().valid == PAGE)
+			invalidate_page(event.get_replace_address().page);
+
 		pages_valid++;
 		state = ACTIVE;
 		modification_time = event.get_start_time();

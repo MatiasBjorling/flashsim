@@ -25,7 +25,10 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 	 * User-space is the number of blocks minus the
 	 * requirements for map directory.
 	 */
-	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE - MAP_DIRECTORY_SIZE;
+	if (FTL_IMPLEMENTATION == IMPL_FAST || FTL_IMPLEMENTATION == IMPL_BAST)
+		max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE - MAP_DIRECTORY_SIZE;
+	else
+		max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
 
 	if (FTL_IMPLEMENTATION == IMPL_FAST) // FAST
 		max_log_blocks = FAST_LOG_PAGE_LIMIT;
@@ -63,8 +66,9 @@ void Block_manager::get_page_block(Address &address)
 	else
 	{
 		assert(free_list.size() != 0);
-		address.set_linear_address(free_list.back()->get_physical_address(), BLOCK);
-		free_list.pop_back();
+
+		address.set_linear_address(free_list.front()->get_physical_address(), BLOCK);
+		free_list.erase(free_list.begin());
 	}
 }
 
@@ -133,14 +137,18 @@ bool Block_manager::block_comparitor (Block const *x,Block const *y) {
 	// We assumme we have to read all pages to write out valid pages. (therefore 1+u) else (1-u)
 	// cost/benefit = (age * (1+u)) / 2u
 
-	float ratio1 = ((BLOCK_SIZE - x->get_pages_valid()) + x->get_pages_invalid()) / BLOCK_SIZE;
-	float ratio2 = ((BLOCK_SIZE - y->get_pages_valid()) + y->get_pages_invalid()) / BLOCK_SIZE;
+	if (x->get_modification_time() == -1)
+		return false;
 
-	double bc1 = (x->get_modification_time() * 1+ratio1) / (1+(2*ratio1));
-	double bc2 = (y->get_modification_time() * 1+ratio2) / (1+(2*ratio2));
+	if (y->get_modification_time() == -1)
+		return true;
 
-//	printf("la: %f %f\n", (x->get_modification_time() * 1+ratio1) , (2*ratio1)+1);
-//	printf("bc1: %f bc2: %f\n", bc1, bc2);
+	float ratio1 = (BLOCK_SIZE - (x->get_pages_valid() - x->get_pages_invalid())) / BLOCK_SIZE;
+	float ratio2 = (BLOCK_SIZE - (y->get_pages_valid() - y->get_pages_invalid())) / BLOCK_SIZE;
+
+	double bc1 = ( 1+ratio1) / (1+(2*ratio1));
+	double bc2 = ( 1+ratio2) / (1+(2*ratio2));
+
 	return bc1 < bc2;
 }
 
@@ -157,7 +165,7 @@ void Block_manager::insert_events(Event &event)
 	if (FTL_IMPLEMENTATION >= 3)
 	{
 		used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
-		//printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+		printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 	} else {
 		//printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 		used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
@@ -165,10 +173,10 @@ void Block_manager::insert_events(Event &event)
 	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
 	float ratio = used/total;
 
-	if (ratio < 0.9) // Magic
+	if (ratio < 0.95) // Magic
 		return;
 
-	uint num_to_erase = 50; // More Magic
+	uint num_to_erase = 5; // More Magic
 
 	// First step and least expensive it to go though invalid list.
 	while (num_to_erase != 0 && invalid_list.size() != 0)
@@ -192,15 +200,35 @@ void Block_manager::insert_events(Event &event)
 		ftl.controller.stats.numFTLErase++;
 	}
 
-	printf("num of free pages: %i num of active pages: %i\n ", (int)free_list.size(), (int)active_list.size());
+	//printf("num of free pages: %i num of active pages: %i\n ", (int)free_list.size(), (int)active_list.size());
+
 	// Then go though the active blocks via the priority queue of active pages.
 	// We limit it to page-mapping algorithms.
-	while (num_to_erase != 0 && active_list.size() != 0)
+	std::sort(active_list.begin(), active_list.end(), & block_comparitor);
+	while (num_to_erase != 0 && active_list.size() > 1)
 	{
-		std::sort(active_list.rbegin(), active_list.rend(), & block_comparitor);
+		int max = 20;
+		if (active_list.size() <= 40)
+			max = active_list.size()/2;
 
-		Block *blockErase = active_list.back();
-		active_list.pop_back();
+		for (int i=0;i<max;i++)
+		{
+			printf("Modi: %f Ratio: %i Block: %li \n", active_list[i]->get_modification_time(), active_list[i]->get_pages_invalid(), active_list[i]->get_physical_address());
+		}
+
+		for (int i=0;i<max;i++)
+		{
+			printf("Modi: %f Ratio: %i Block: %li \n", active_list[active_list.size()-max+i]->get_modification_time(), active_list[active_list.size()-max+i]->get_pages_invalid(), active_list[active_list.size()-max+i]->get_physical_address());
+		}
+
+		Block *blockErase = active_list.front();
+
+		if (blockErase->get_physical_address() == event.get_address().get_linear_address() - event.get_address().get_linear_address() % BLOCK_SIZE)
+		{
+			blockErase = active_list[1];
+			active_list.erase(active_list.begin()+1);
+		} else
+			active_list.erase(active_list.begin());
 
 		// Let the FTL handle cleanup of the block.
 		ftl.cleanup_block(event, blockErase);
@@ -211,7 +239,16 @@ void Block_manager::insert_events(Event &event)
 		printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
 		erase_event.set_address(address);
 
+		int c1 = (int)free_list.size();
+
 		free_list.push_back(blockErase);
+
+		int c2 = (int)free_list.size();
+
+		if (c1 == c2)
+			printf("omg?\n");
+
+		printf("free_list size: %i\n", (int)free_list.size());
 
 		// Execute erase
 		ftl.controller.issue(erase_event);
@@ -221,6 +258,8 @@ void Block_manager::insert_events(Event &event)
 		num_to_erase--;
 		ftl.controller.stats.numFTLErase++;
 	}
+
+	printf("A Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 }
 
 Address Block_manager::get_free_block(block_type type)
@@ -244,7 +283,7 @@ Address Block_manager::get_free_block(block_type type)
 		break;
 	}
 
-	if (FTL_IMPLEMENTATION >= 3)
+	if (FTL_IMPLEMENTATION >= IMPL_DFTL)
 		active_list.push_back(ftl.get_block_pointer(address));
 
 	return address;

@@ -60,5 +60,6 @@ Block *FtlParent::get_block_pointer(const Address &address)
 
 void FtlParent::cleanup_block(Event &event, Block *block)
 {
+	fprintf(stderr, "Please implement interface");
 	return;
 }
