@@ -105,8 +105,8 @@ enum status Die::write(Event &event)
 enum status Die::replace(Event &event)
 {
 	assert(data != NULL);
-	assert(event.get_address().plane < size && event.get_address().valid > DIE);
-	return data[event.get_address().plane].replace(event);
+	assert(event.get_address().plane < size);
+	return data[event.get_replace_address().plane].replace(event);
 }
 
 /* if no errors

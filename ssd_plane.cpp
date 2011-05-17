@@ -134,8 +134,8 @@ enum status Plane::write(Event &event)
 
 enum status Plane::replace(Event &event)
 {
-	assert(event.get_address().block < size && event.get_address().valid > PLANE);
-	return data[event.get_address().block].replace(event);
+	assert(event.get_address().block < size);
+	return data[event.get_replace_address().block].replace(event);
 }
 
 

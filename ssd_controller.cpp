@@ -100,7 +100,8 @@ enum status Controller::issue(Event &event_list)
 				|| ssd.read(*cur) == FAILURE
 				|| ssd.bus.lock(cur -> get_address().package, cur -> get_start_time(), BUS_CTRL_DELAY + BUS_DATA_DELAY, *cur) == FAILURE
 				|| ssd.ram.write(*cur) == FAILURE
-				|| ssd.ram.read(*cur) == FAILURE)
+				|| ssd.ram.read(*cur) == FAILURE
+				|| ssd.replace(*cur) == FAILURE)
 				return FAILURE;
 		}
 		else if(cur -> get_event_type() == WRITE)
@@ -109,7 +110,8 @@ enum status Controller::issue(Event &event_list)
 			if(ssd.bus.lock(cur -> get_address().package, cur -> get_start_time(), BUS_CTRL_DELAY + BUS_DATA_DELAY, *cur) == FAILURE
 				|| ssd.ram.write(*cur) == FAILURE
 				|| ssd.ram.read(*cur) == FAILURE
-				|| ssd.write(*cur) == FAILURE)
+				|| ssd.write(*cur) == FAILURE
+				|| ssd.replace(*cur) == FAILURE)
 				return FAILURE;
 		}
 		else if(cur -> get_event_type() == ERASE)

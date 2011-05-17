@@ -250,8 +250,11 @@ enum status Ssd::write(Event &event)
 
 enum status Ssd::replace(Event &event)
 {
-	assert(data != NULL && event.get_address().package < size && event.get_address().valid >= PACKAGE);
-	return data[event.get_address().package].replace(event);
+	assert(data != NULL && event.get_address().package < size);
+	if (event.get_replace_address().valid == PAGE)
+		return data[event.get_replace_address().package].replace(event);
+	else
+		return SUCCESS;
 }
 
 

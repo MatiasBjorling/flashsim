@@ -103,10 +103,6 @@ enum status Block::write(Event &event)
 	enum status ret = data[event.get_address().page]._write(event);
 	if(ret == SUCCESS && event.get_noop() == false)
 	{
-
-		if (event.get_replace_address().valid == PAGE)
-			invalidate_page(event.get_replace_address().page);
-
 		pages_valid++;
 		state = ACTIVE;
 		modification_time = event.get_start_time();
@@ -207,7 +203,7 @@ void Block::invalidate_page(uint page)
 		state = ACTIVE;
 	else
 		state = FREE;
-	
+
 	return;
 }
 
