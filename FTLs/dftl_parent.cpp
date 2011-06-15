@@ -153,13 +153,7 @@ long FtlImpl_DftlParent::get_free_translation_page()
 long FtlImpl_DftlParent::get_free_data_page()
 {
 	if (currentDataPage == -1 || currentDataPage % BLOCK_SIZE == BLOCK_SIZE -1)
-	{
 		currentDataPage = manager.get_free_block(DATA).get_linear_address();
-//		Address a = Address(currentDataPage, PAGE);
-//
-//		printf("pages valid: %i\n", controller.get_block_pointer(a)->get_pages_valid());
-
-	}
 	else
 		currentDataPage++;
 

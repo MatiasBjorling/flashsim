@@ -26,7 +26,9 @@ double do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 		result += iotime;
 		if (type == READ)
 		{
-			if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)
+			if (ssd->get_result_buffer() == NULL)
+				printf("Data has not been written\n");
+			else if (memcmp(ssd->get_result_buffer(), (char*)test + adr, PAGE_SIZE) != 0)
 				fprintf(stderr, "i: %i ", i);
 		}
 		i++;
@@ -114,6 +116,9 @@ int main()
 
 	printf("Test 1. Write sequential test data.\n");
 	result += do_seq(ssd, WRITE, test_data, st.st_size);
+
+	printf("Test 1. Trim data.\n");
+	result += do_seq(ssd, TRIM, test_data, st.st_size);
 
 
 	printf("Test 2. Read sequential test data.\n");

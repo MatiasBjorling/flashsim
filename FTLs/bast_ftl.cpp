@@ -123,14 +123,16 @@ enum status FtlImpl_Bast::read(Event &event)
 		Address returnAddress = Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
 		event.set_address(returnAddress);
 	}
-	else  if (data_list[lookupBlock] == -1 && logBlock != NULL && logBlock->pages[eventAddress.page] == -1) // If page is in the data block
+	else  if ((data_list[lookupBlock] == -1 && logBlock != NULL && logBlock->pages[eventAddress.page] == -1) || (data_list[lookupBlock] == -1 && logBlock == NULL))
 	{
 		event.set_address(Address(0, PAGE));
-		fprintf(stderr, "Page has not been written. Logical Address: %li\n", event.get_logical_address());
-	} else {
+	} else { // page is in the data block
 		Address returnAddress = Address(data_list[lookupBlock]+ event.get_logical_address() % BLOCK_SIZE , PAGE);
 		event.set_address(returnAddress);
 	}
+
+	if (controller.get_state(event.get_address()) == INVALID)
+		event.set_address(Address(0, PAGE));
 
 	manager.simulate_map_read(event);
 	manager.insert_events(event);
@@ -188,7 +190,58 @@ enum status FtlImpl_Bast::write(Event &event)
 
 enum status FtlImpl_Bast::trim(Event &event)
 {
-	return SUCCESS;
+	// Find block
+	long lookupBlock = (event.get_logical_address() >> addressShift);
+	Address eventAddress = Address(event.get_logical_address(), PAGE);
+
+	LogPageBlock *logBlock = NULL;
+	if (log_map.find(lookupBlock) != log_map.end())
+		logBlock = log_map[lookupBlock];
+
+	controller.stats.numMemoryRead++;
+
+	Address returnAddress;
+
+	if (logBlock != NULL && logBlock->pages[eventAddress.page] != -1) // If page is in the log block
+	{
+		returnAddress = Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
+		Block *lBlock = controller.get_block_pointer(returnAddress);
+		lBlock->invalidate_page(returnAddress.page);
+
+		logBlock->pages[eventAddress.page] = -1; // Reset the mapping
+
+		if (lBlock->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
+		{
+			dispose_logblock(logBlock, lookupBlock);
+			manager.erase_and_invalidate(event, returnAddress, LOG);
+		}
+
+	}
+
+	if (data_list[lookupBlock] != -1) // Datablock
+	{
+		Address dataAddress = Address(data_list[lookupBlock]+event.get_logical_address() % BLOCK_SIZE , PAGE);
+		Block *dBlock = controller.get_block_pointer(dataAddress);
+		dBlock->invalidate_page(dataAddress.page);
+
+		if (dBlock->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
+		{
+			data_list[lookupBlock] = -1;
+			manager.erase_and_invalidate(event, dataAddress, DATA);
+		}
+
+	}
+
+	event.set_address(returnAddress);
+	event.set_noop(true);
+
+	manager.simulate_map_read(event);
+	manager.insert_events(event);
+
+	// Statistics
+	controller.stats.numFTLTrim++;
+
+	return controller.issue(event);
 }
 
 
@@ -284,6 +337,9 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 			readAddress.set_linear_address(data_list[logicalBlockAddress] + i, PAGE);
 		else
 			continue; // Empty page
+
+		if (controller.get_state(readAddress) == INVALID) // A page might be invalidated by trim
+			continue;
 
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());

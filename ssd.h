@@ -263,6 +263,7 @@ public:
 	long numFTLRead;
 	long numFTLWrite;
 	long numFTLErase;
+	long numFTLTrim;
 
 	// Garbage Collection
 	long numGCRead;
@@ -355,7 +356,6 @@ public:
 	double incr_bus_wait_time(double time);
 	double incr_time_taken(double time_incr);
 	void print(FILE *stream = stdout);
-	Event *get_last_event(Event &event) const;
 private:
 	double start_time;
 	double time_taken;
@@ -630,6 +630,7 @@ public:
 	void insert_events(Event &event);
 	void promote_block(block_type to_type);
 	bool is_log_full();
+	void erase_and_invalidate(Event &event, Address &address, block_type btype);
 
 	// Map directory
 	void simulate_map_write(Event &events);
@@ -707,8 +708,6 @@ public:
 	enum status write(Event &event);
 	enum status trim(Event &event);
 private:
-	Address resolve_logical_address(uint logicalAddress);
-
 	ulong currentPage;
 	long *map;
 };
@@ -845,6 +844,7 @@ private:
 	};
 
 	BPage *block_map;
+	bool *trim_map;
 };
 
 

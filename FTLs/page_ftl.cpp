@@ -30,63 +30,29 @@ using namespace ssd;
 FtlImpl_Page::FtlImpl_Page(Controller &controller):
 	FtlParent(controller)
 {
-	currentPage = 0;
-
-	uint numCells = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
-	map = new long[numCells];
-	for (uint i=0;i<numCells;i++)
-		map[i] = -1;
-
 	return;
 }
 
 FtlImpl_Page::~FtlImpl_Page(void)
 {
-	delete map;
+
 	return;
 }
 
 enum status FtlImpl_Page::read(Event &event)
 {
-	if (map[event.get_logical_address()] == -1)
-	{
-		fprintf(stderr, "Page not written! Logical Address: %i\n", event.get_logical_address());
-		return FAILURE;
-	}
+	event.set_address(Address(0, PAGE));
+	event.set_noop(true);
 
-	// Lookup mapping
-	event.set_address(resolve_logical_address(map[event.get_logical_address()]));
-
-	page_state s = controller.get_state(event.get_address());
-
-	fprintf(stderr, "CP: %u LP: %u\n", map[event.get_logical_address()], event.get_logical_address());
-	if (s == VALID)
-	{
-		controller.issue(event);
-	}
-	else
-	{
-		fprintf(stderr, "Page warning: Not able to read page as it has not been written or is invalid.");
-		return FAILURE;
-	}
-
+	controller.issue(event);
 
 	return SUCCESS;
 }
 
 enum status FtlImpl_Page::write(Event &event)
 {
-	Address address = resolve_logical_address(currentPage);
-
-	// Physical address of I/O.
-	event.set_address(address);
-
-	// Update mappings
-	map[event.get_logical_address()] = currentPage;
-
-	fprintf(stderr, "CP: %u LP: %u\n", map[event.get_logical_address()], event.get_logical_address());
-
-	currentPage++;
+	event.set_address(Address(1, PAGE));
+	event.set_noop(true);
 
 	controller.issue(event);
 
@@ -97,21 +63,3 @@ enum status FtlImpl_Page::trim(Event &event)
 {
 	return SUCCESS;
 }
-
-inline Address FtlImpl_Page::resolve_logical_address(uint logicalAddress)
-{
-	uint numCells = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
-
-	Address phyAddress;
-	phyAddress.package = floor(logicalAddress / (numCells / SSD_SIZE));
-	phyAddress.die = floor(logicalAddress / (numCells / SSD_SIZE / PACKAGE_SIZE));
-	phyAddress.plane = floor(logicalAddress / (numCells / SSD_SIZE / PACKAGE_SIZE / DIE_SIZE));
-	phyAddress.block = floor(logicalAddress / (numCells / SSD_SIZE / PACKAGE_SIZE / DIE_SIZE / PLANE_SIZE));
-	phyAddress.page = logicalAddress % BLOCK_SIZE;
-	phyAddress.valid = PAGE;
-
-	fprintf(stderr, "numCells: %i package: %i die: %i plane: %i block: %i page: %i\n", numCells, phyAddress.package, phyAddress.die, phyAddress.plane, phyAddress.block, phyAddress.page);
-
-	return phyAddress;
-}
-

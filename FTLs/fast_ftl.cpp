@@ -135,11 +135,10 @@ enum status FtlImpl_Fast::read(Event &event)
 		{
 			event.set_address(Address(data_list[lookupBlock] + lbnOffset , PAGE));
 			manager.simulate_map_read(event);
-		}
-		else
-		{
-			printf("Address has not been written\n");
-			return FAILURE;
+		} else { // Empty
+			event.set_address(Address(0, PAGE));
+			event.set_noop(true);
+			manager.simulate_map_read(event);
 		}
 	}
 
@@ -204,7 +203,88 @@ enum status FtlImpl_Fast::write(Event &event)
 
 enum status FtlImpl_Fast::trim(Event &event)
 {
-	return SUCCESS;
+	initialize_log_pages();
+
+	// Find block
+	long lookupBlock = (event.get_logical_address() >> addressShift);
+	uint lbnOffset = event.get_logical_address() % BLOCK_SIZE;
+
+	Address eventAddress = Address(event.get_logical_address(), PAGE);
+
+	LogPageBlock *currentBlock = log_pages;
+
+	bool found = false;
+	while (!found && currentBlock != NULL)
+	{
+		for (int i=0;i<currentBlock->numPages;i++)
+		{
+			event.incr_time_taken(RAM_READ_DELAY);
+
+			if (currentBlock->aPages[i] == event.get_logical_address())
+			{
+				Address address = Address(currentBlock->address.get_linear_address() + i, PAGE);
+				Block *block = controller.get_block_pointer(address);
+				block->invalidate_page(address.page);
+
+				currentBlock->aPages[i] = -1;
+
+				if (block->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
+				{
+					manager.erase_and_invalidate(event, currentBlock->address, LOG);
+					data_list[lookupBlock] = -1;
+				}
+
+				// Cancel the while and for loop
+				found = true;
+				break;
+			}
+		}
+
+		currentBlock = currentBlock->next;
+	}
+
+	if (!found)
+	{
+		if (sequential_logicalblock_address == lookupBlock && sequential_offset > lbnOffset)
+		{
+			Address address = Address(sequential_address.get_linear_address() + lbnOffset, PAGE);
+			Block *block = controller.get_block_pointer(address);
+			block->invalidate_page(address.page);
+
+			if (block->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
+			{
+				manager.erase_and_invalidate(event, address, LOG);
+				sequential_logicalblock_address = -1;
+			}
+
+		}
+		else if (data_list[lookupBlock] != -1) // If page is in the data block
+		{
+			Address address = Address(data_list[lookupBlock] + lbnOffset , PAGE);
+
+			Block *block = controller.get_block_pointer(address);
+			block->invalidate_page(address.page);
+
+			if (block->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
+			{
+				manager.erase_and_invalidate(event, address, LOG);
+				data_list[lookupBlock] = -1;
+			}
+
+			manager.simulate_map_read(event);
+		}
+	}
+
+	event.set_noop(true);
+	event.set_address(Address(0, PAGE));
+
+	// Insert garbage collection
+	manager.insert_events(event);
+
+	// Statistics
+	controller.stats.numFTLTrim++;
+
+	return controller.issue(event);
 }
 
 
@@ -216,15 +296,11 @@ void FtlImpl_Fast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlo
 		LogPageBlock *exLogBlock = (*log_map.begin()).second;
 
 		printf("killing %li with address: %lu\n", exLogicalBlock, exLogBlock->address.get_linear_address());
-
-//		if (!is_sequential(exLogBlock, exLogicalBlock, event))
-//			random_merge(exLogBlock, exLogicalBlock, event);
 	}
 
 	logBlock = new LogPageBlock();
 	logBlock->address = manager.get_free_block(LOG);
 
-	//printf("Using new log block with address: %lu Block: %u at logical address: %li\n", logBlock->address.get_linear_address(), logBlock->address.block, logicalBlockAddress);
 	log_map[logicalBlockAddress] = logBlock;
 }
 
@@ -247,8 +323,6 @@ void FtlImpl_Fast::switch_sequential(Event &event)
 	data_list[sequential_logicalblock_address] = sequential_address.get_linear_address();
 
 	controller.stats.numLogMergeSwitch++;
-
-	//printf("Switch sequential\n");
 }
 
 void FtlImpl_Fast::merge_sequential(Event &event)

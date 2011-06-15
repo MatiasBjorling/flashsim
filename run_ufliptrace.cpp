@@ -1,7 +1,3 @@
-/* Copyright 2009, 2010 Brendan Tauras */
-
-/* run_trace.cpp is part of FlashSim. */
-
 /* FlashSim is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -17,15 +13,7 @@
 
 /****************************************************************************/
 
-/* ASCII trace driver
- * Brendan Tauras 2009-05-21
- *
- * driver to run traces - just provide the ASCII trace file
- * not accurate, for test purposes only
- * goes through trace and treats read requests as writes to prepare the SSD
- * 	(requests will fail if there are multiple writes to same address)
- * then goes through the trace again as normal
- * 	(write requests may fail if they are attempts to overwrite) */
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,12 +22,15 @@
 using namespace ssd;
 
 int main(int argc, char **argv){
+
+	long vaddr;
+	ssd::uint queryTime;
+	char ioPatternType; // (S)equential or (R)andom
+	char ioType; // (R)ead or (W)rite
 	double arrive_time;
-	ssd::uint diskno;
-	ssd::ulong vaddr;
-	ssd::uint size;
-	ssd::uint op;
+
 	char line[80];
+
 	double read_time = 0;
 	double write_time = 0;
 	double read_total = 0;
@@ -49,9 +40,9 @@ int main(int argc, char **argv){
 
 	load_config();
 	print_config(NULL);
-	printf("Press ENTER to continue...");
-	getchar();
-	printf("\n");
+//	printf("Press ENTER to continue...");
+//	getchar();
+//	printf("\n");
 
 	Ssd ssd;
 
@@ -65,34 +56,37 @@ int main(int argc, char **argv){
 
 	/* first go through and write to all read addresses to prepare the SSD */
 	while(fgets(line, 80, trace) != NULL){
-		sscanf(line, "%lf %u %lu %u %u", &arrive_time, &diskno, &vaddr, &size, &op);
-		vaddr %= 65536;
-		if(op == 1)
-			(void) ssd.event_arrive(WRITE, vaddr, size, arrive_time);
+		sscanf(line, "%c; %c; %li; %u; %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time);
+
+		if(ioType == 'W')
+			(void) ssd.event_arrive(WRITE, vaddr, 1, arrive_time);
+
+		printf(line);
+		printf("%c %c %li %u %lf\n", ioPatternType, ioType, vaddr, queryTime, arrive_time);
 	}
 
-	printf("STARTING TRACE\n");
-
-	/* now rewind file and run trace */
-	fseek(trace, 0, SEEK_SET);
-	while(fgets(line, 80, trace) != NULL){
-		sscanf(line, "%lf %u %lu %u %u", &arrive_time, &diskno, &vaddr, &size, &op);
-		vaddr %= 65536;
-		if(op == 0){
-			write_time = ssd.event_arrive(WRITE, vaddr, size, arrive_time);
-			if(write_time != 0){
-				write_total += write_time;
-				num_writes++;
-			}
-		} else if(op == 1){
-			read_time = ssd.event_arrive(READ, vaddr, size, arrive_time);
-			if(read_time != 0){
-				read_total += read_time;
-				num_reads++;
-			}
-		} else
-			fprintf(stderr, "Bad operation in trace\n");
-	}
+//	printf("STARTING TRACE\n");
+//
+//	/* now rewind file and run trace */
+//	fseek(trace, 0, SEEK_SET);
+//	while(fgets(line, 80, trace) != NULL){
+//		sscanf(line, "%c; %c; %li; %u; %ld", &ioPatternType, &ioType, &vaddr, &queryTime, arrive_time);
+//		vaddr %= 65536;
+//		if(op == 0){
+//			write_time = ssd.event_arrive(WRITE, vaddr, size, arrive_time);
+//			if(write_time != 0){
+//				write_total += write_time;
+//				num_writes++;
+//			}
+//		} else if(op == 1){
+//			read_time = ssd.event_arrive(READ, vaddr, size, arrive_time);
+//			if(read_time != 0){
+//				read_total += read_time;
+//				num_reads++;
+//			}
+//		} else
+//			fprintf(stderr, "Bad operation in trace\n");
+//	}
 	printf("Num reads : %lu\n", num_reads);
 	printf("Num writes: %lu\n", num_reads);
 	printf("Avg read time : %.20lf\n", read_time / num_reads);

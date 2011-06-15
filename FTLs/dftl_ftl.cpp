@@ -61,7 +61,14 @@ enum status FtlImpl_Dftl::read(Event &event)
 
 	resolve_mapping(event, false);
 
-	event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+	if (trans_map[dlpn].ppn == -1)
+	{
+		event.set_address(Address(0, PAGE));
+		event.set_noop(true);
+	}
+	else
+		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+
 
 	controller.stats.numFTLRead++;
 
@@ -96,7 +103,28 @@ enum status FtlImpl_Dftl::write(Event &event)
 
 enum status FtlImpl_Dftl::trim(Event &event)
 {
-	return SUCCESS;
+	uint dlpn = event.get_logical_address();
+
+	resolve_mapping(event, false);
+
+	event.set_address(Address(0, PAGE));
+
+	if (trans_map[dlpn].ppn != -1)
+	{
+		Address address = Address(trans_map[dlpn].ppn, PAGE);
+		Block *block = controller.get_block_pointer(address);
+		block->invalidate_page(address.page);
+		trans_map[dlpn].ppn = -1;
+		trans_map[dlpn].modified_ts = -1;
+		trans_map[dlpn].modified_ts = -1;
+	}
+
+	controller.stats.numFTLTrim++;
+
+	// Insert garbage collection
+	manager.insert_events(event);
+
+	return controller.issue(event);
 }
 
 void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)

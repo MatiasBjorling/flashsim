@@ -208,28 +208,6 @@ double Event::incr_time_taken(double time_incr)
 	return time_taken;
 }
 
-Event *Event::get_last_event(Event &event) const
-{
-	Event *cur_event;
-
-//	printf("Traversing ");
-//	if (event.get_payload() != NULL)
-//		printf("p");
-//	else
-//		printf("o");
-
-	for(cur_event = &event; cur_event->next != NULL; cur_event = cur_event->next)
-	{
-//		if (cur_event->next->get_payload() != NULL)
-//			printf("p");
-//		else
-//			printf("o");
-	}
-//	printf("\n");
-
-	return cur_event;
-}
-
 void Event::print(FILE *stream)
 {
 	if(type == READ)

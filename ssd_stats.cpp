@@ -35,6 +35,7 @@ Stats::Stats()
 	numFTLRead = 0;
 	numFTLWrite = 0;
 	numFTLErase = 0;
+	numFTLTrim = 0;
 
 	//GC
 	numGCRead = 0;
@@ -70,7 +71,7 @@ void Stats::print_statistics()
 {
 	printf("Statistics:\n");
 	printf("-----------\n");
-	printf("FTL Reads: %li\t Writes: %li\t Erases: %li\n", numFTLRead, numFTLWrite, numFTLErase);
+	printf("FTL Reads: %li\t Writes: %li\t Erases: %li\t Trims: %li\n", numFTLRead, numFTLWrite, numFTLErase, numFTLTrim);
 	printf("GC  Reads: %li\t Writes: %li\t Erases: %li\n", numGCRead, numGCWrite, numGCErase);
 	printf("WL  Reads: %li\t Writes: %li\t Erases: %li\n", numWLRead, numWLWrite, numWLErase);
 	printf("Log FTL Switch: %li Partial: %li Full: %li\n", numLogMergeSwitch, numLogMergePartial, numLogMergeFull);

@@ -52,11 +52,11 @@ FtlImpl_BDftl::FtlImpl_BDftl(Controller &controller):
 
 	uint ssdBlockSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
 	block_map = new BPage[ssdBlockSize];
+	trim_map = new bool[ssdBlockSize*BLOCK_SIZE];
 
 	// TODO: Add SSDBlockSize to the calculation.
 	//printf("Total size to map: %uKB\n", ssdSize * PAGE_SIZE / 1024);
 	printf("Using BDFTL.\n");
-	return;
 }
 
 
@@ -64,6 +64,7 @@ FtlImpl_BDftl::FtlImpl_BDftl(Controller &controller):
 FtlImpl_BDftl::~FtlImpl_BDftl(void)
 {
 	delete block_map;
+	delete trim_map;
 	return;
 }
 
@@ -73,28 +74,34 @@ enum status FtlImpl_BDftl::read(Event &event)
 	uint dlbn = dlpn / BLOCK_SIZE;
 
 	// Block-level lookup
-	if (block_map[dlbn].optimal == false)
+	if (block_map[dlbn].optimal)
 	{
-		// DFTL lookup
-		resolve_mapping(event, false);
-
-		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
-	} else {
 		uint dppn = block_map[dlbn].pbn + (dlpn % BLOCK_SIZE);
 
-		event.set_address(Address(dppn, PAGE));
+		if (block_map[dlbn].pbn != -1)
+			event.set_address(Address(dppn, PAGE));
+		else
+		{
+			event.set_address(Address(0, PAGE));
+			event.set_noop(true);
+		}
+	} else { // DFTL lookup
+		resolve_mapping(event, false);
+
+		if (trans_map[dlpn].ppn != -1)
+			event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+		else
+		{
+			event.set_address(Address(0, PAGE));
+			event.set_noop(true);
+		}
 	}
 
 	event.incr_time_taken(RAM_READ_DELAY*2);
 	controller.stats.numMemoryRead += 2; // Block-level lookup + range check
 	controller.stats.numFTLRead++; // Page read
 
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
-
-	event.consolidate_metaevent(event);
-
-	return SUCCESS;
+	return controller.issue(event);
 }
 
 
@@ -103,18 +110,12 @@ enum status FtlImpl_BDftl::write(Event &event)
 	uint dlpn = event.get_logical_address();
 	uint dlbn = dlpn / BLOCK_SIZE;
 
+	// Update trim map
+	trim_map[dlpn] = false;
+
 	// Block-level lookup
-	if (block_map[dlbn].optimal == false)
+	if (block_map[dlbn].optimal)
 	{
-		// DFTL lookup
-		resolve_mapping(event, true);
-
-		// Get next available data page
-		trans_map[dlpn].ppn = get_free_data_page();
-
-		// Finish DFTL logic
-		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
-	} else {
 		// Optimised case for block level lookup
 
 		// Get new block if necessary
@@ -165,6 +166,15 @@ enum status FtlImpl_BDftl::write(Event &event)
 
 			controller.stats.numPageBlockToPageConversion++;
 		}
+	} else {
+		// DFTL lookup
+		resolve_mapping(event, true);
+
+		// Get next available data page
+		trans_map[dlpn].ppn = get_free_data_page();
+
+		// Finish DFTL logic
+		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
 	}
 
 	controller.stats.numMemoryRead += 3; // Block-level lookup + range check + optimal check
@@ -174,17 +184,83 @@ enum status FtlImpl_BDftl::write(Event &event)
 	// Insert garbage collection
 	manager.insert_events(event);
 
-	if (controller.issue(event) == FAILURE)
-		return FAILURE;
-
-	event.consolidate_metaevent(event);
-
-	return SUCCESS;
+	return controller.issue(event);
 }
 
 enum status FtlImpl_BDftl::trim(Event &event)
 {
-	return SUCCESS;
+	uint dlpn = event.get_logical_address();
+	uint dlbn = dlpn / BLOCK_SIZE;
+
+	// Update trim map
+	trim_map[dlpn] = true;
+
+	// Block-level lookup
+	if (block_map[dlbn].optimal)
+	{
+		uint dppn = block_map[dlbn].pbn + (dlpn % BLOCK_SIZE);
+		Address address = Address(block_map[dlbn].pbn, PAGE);
+		Block *block = controller.get_block_pointer(address);
+		block->invalidate_page(address.page);
+
+		if (block->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
+		{
+			block_map[dlbn].pbn = -1;
+			block_map[dlbn].nextPage = 0;
+			manager.erase_and_invalidate(event, address, DATA);
+		}
+	} else { // DFTL lookup
+
+		resolve_mapping(event, false);
+
+		if (trans_map[dlpn].ppn != -1)
+		{
+			Address address = Address(trans_map[dlpn].ppn, PAGE);
+			Block *block = controller.get_block_pointer(address);
+			block->invalidate_page(address.page);
+
+			// Update translation map to default values.
+			trans_map[dlpn].ppn = -1;
+			trans_map[dlpn].modified_ts = -1;
+			trans_map[dlpn].modified_ts = -1;
+
+			// Remove it from cache too.
+			cmt.erase(dlpn);
+
+			event.incr_time_taken(RAM_READ_DELAY);
+			event.incr_time_taken(RAM_WRITE_DELAY);
+			controller.stats.numMemoryRead++;
+			controller.stats.numMemoryWrite++;
+
+			// Update trim map and update block map if all pages are trimmed. i.e. the state are reseted to optimal.
+			long addressStart = dlpn - dlpn % BLOCK_SIZE;
+			bool allTrimmed = true;
+			for (uint i=addressStart;i<addressStart+BLOCK_SIZE;i++)
+			{
+				if (!trim_map[i])
+					allTrimmed = false;
+			}
+
+			controller.stats.numMemoryRead++; // Trim map looping
+
+			if (allTrimmed)
+			{
+				block_map[dlbn].pbn = -1;
+				block_map[dlbn].nextPage = 0;
+				block_map[dlbn].optimal = true;
+				controller.stats.numMemoryWrite++; // Update block_map.
+			}
+		}
+	}
+
+	event.set_address(Address(0, PAGE));
+	event.set_noop(true);
+
+	event.incr_time_taken(RAM_READ_DELAY*2);
+	controller.stats.numMemoryRead += 2; // Block-level lookup + range check
+	controller.stats.numFTLTrim++; // Page trim
+
+	return controller.issue(event);
 }
 
 void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)

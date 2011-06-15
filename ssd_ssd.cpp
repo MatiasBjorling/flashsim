@@ -142,11 +142,6 @@ double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size,
 	/* allocate the event and address dynamically so that the allocator can
 	 * handle efficiency issues for us */
 	Event *event = NULL;
-	/* STUB ONLY */
-	#if 0
-	Address *address = NULL;
-	#endif
-	/* END STUB ONLY */
 
 	if((event = new Event(type, logical_address, size, start_time)) == NULL)
 	{
@@ -156,64 +151,11 @@ double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size,
 
 	event->set_payload(buffer);
 
-	/* REAL SSD ONLY */
 	if(controller.event_arrive(*event) != SUCCESS)
 	{
 		fprintf(stderr, "Ssd error: %s: request failed:\n", __func__);
 		event -> print(stderr);
 	}
-	/* END REAL SSD ONLY */
-
-	/* STUB ONLY
-	 * real SSD will let the FTL determine the physical address */
-	#if 0
-	if((address = new Address()) == NULL)
-	{
-		fprintf(stderr, "Ssd error: %s: could not allocate Address\n", __func__);
-		exit(MEM_ERR);
-	}
-
-	address -> page = logical_address % BLOCK_SIZE;
-	logical_address /= BLOCK_SIZE;
-	address -> block = logical_address % PLANE_SIZE;
-	logical_address /= PLANE_SIZE;
-	address -> plane = logical_address % DIE_SIZE;
-	logical_address /= DIE_SIZE;
-	address -> die = logical_address % PACKAGE_SIZE;
-	logical_address /= PACKAGE_SIZE;
-	address -> package = logical_address % SSD_SIZE;
-	logical_address /= SSD_SIZE;
-	address -> valid = PAGE;
-
-	event -> set_address(address);
-
-	/* the bus locking should be done in the controller in the real SSD */
-	if(type == READ){
-		if(bus.lock(address -> package, start_time, BUS_CTRL_DELAY, *event) != SUCCESS){
-			fprintf(stderr, "Ssd error: %s: locking bus channel %u for read command failed:\n", __func__, address -> package);
-		} else{
-			if(data[address -> package].read(*event) != SUCCESS)
-				fprintf(stderr, "Ssd error: %s: read request failed:\n", __func__);
-			else{
-				if(bus.lock(address -> package, start_time, BUS_CTRL_DELAY + BUS_DATA_DELAY, *event) != SUCCESS)
-					fprintf(stderr, "Ssd error: %s: locking bus channel %u for read data failed:\n", __func__, address -> package);
-			}
-		}
-
-	} else if(type == WRITE){
-		if(bus.lock(address -> package, start_time, BUS_CTRL_DELAY + BUS_DATA_DELAY, *event) != SUCCESS){
-			fprintf(stderr, "Ssd error: %s: locking bus channel %u for write data failed:\n", __func__, address -> package);
-		} else{
-			if(data[address -> package].write(*event) != SUCCESS)
-				fprintf(stderr, "Ssd error: %s: write request failed:\n", __func__);
-		}
-
-	} else
-		fprintf(stderr, "Ssd error: %s: incoming request was not of type read or write\n", __func__);
-	event -> print();
-	delete address;
-	#endif
-	/* END STUB ONLY */
 
 	/* use start_time as a temporary for returning time taken to service event */
 	start_time = event -> get_time_taken();

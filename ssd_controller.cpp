@@ -129,6 +129,10 @@ enum status Controller::issue(Event &event_list)
 				|| ssd.merge(*cur) == FAILURE)
 				return FAILURE;
 		}
+		else if(cur -> get_event_type() == TRIM)
+		{
+			return SUCCESS;
+		}
 		else
 		{
 			fprintf(stderr, "Controller: %s: Invalid event type\n", __func__);
@@ -197,4 +201,5 @@ Block *Controller::get_block_pointer(const Address & address)
 {
 	return ssd.get_block_pointer(address);
 }
+
 
