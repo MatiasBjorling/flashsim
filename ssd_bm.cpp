@@ -165,7 +165,8 @@ void Block_manager::insert_events(Event &event)
 	if (FTL_IMPLEMENTATION >= 3)
 	{
 		used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
-		printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+		if (active_list.size() % 100 == 0)
+			printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 	} else {
 		//printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 		used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
@@ -207,21 +208,29 @@ void Block_manager::insert_events(Event &event)
 	std::sort(active_list.begin(), active_list.end(), &block_comparitor);
 	while (num_to_erase != 0 && active_list.size() > 1)
 	{
-		int max = 20;
-		if (active_list.size() <= 40)
-			max = active_list.size()/2;
+//		int max = 10;
+//		if (active_list.size() <= 20)
+//			max = active_list.size()/2;
 
-		for (int i=0;i<max;i++)
-		{
-			printf("Modi: %f Ratio: %i Block: %li \n", active_list[i]->get_modification_time(), active_list[i]->get_pages_invalid(), active_list[i]->get_physical_address());
-		}
-
-		for (int i=0;i<max;i++)
-		{
-			printf("Modi: %f Ratio: %i Block: %li \n", active_list[active_list.size()-max+i]->get_modification_time(), active_list[active_list.size()-max+i]->get_pages_invalid(), active_list[active_list.size()-max+i]->get_physical_address());
-		}
+//		for (int i=0;i<max;i++)
+//		{
+//			printf("Modi: %f Ratio: %i Block: %li \n", active_list[i]->get_modification_time(), active_list[i]->get_pages_invalid(), active_list[i]->get_physical_address());
+//		}
+//
+//		for (int i=0;i<max;i++)
+//		{
+//			printf("Modi: %f Ratio: %i Block: %li \n", active_list[active_list.size()-max+i]->get_modification_time(), active_list[active_list.size()-max+i]->get_pages_invalid(), active_list[active_list.size()-max+i]->get_physical_address());
+//		}
 
 		Block *blockErase = active_list.front();
+
+		// If there is no gain, then don't move the pages.
+		if (blockErase->get_pages_invalid() == 0)
+		{
+			num_to_erase--;
+			continue;
+		}
+
 
 		if (blockErase->get_physical_address() == event.get_address().get_linear_address() - event.get_address().get_linear_address() % BLOCK_SIZE)
 		{
@@ -252,7 +261,7 @@ void Block_manager::insert_events(Event &event)
 		ftl.controller.stats.numFTLErase++;
 	}
 
-	printf("A Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+	//printf("A Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 }
 
 Address Block_manager::get_free_block(block_type type)

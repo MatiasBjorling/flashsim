@@ -40,9 +40,6 @@ int main(int argc, char **argv){
 
 	load_config();
 	print_config(NULL);
-//	printf("Press ENTER to continue...");
-//	getchar();
-//	printf("\n");
 
 	Ssd ssd;
 
@@ -54,41 +51,31 @@ int main(int argc, char **argv){
 
 	printf("INITIALIZING SSD\n");
 
+	for (int i=0; i<2097152;i++)
+	{
+		write_time += ssd.event_arrive(WRITE, i, 1, i*2);
+	}
+
 	/* first go through and write to all read addresses to prepare the SSD */
 	while(fgets(line, 80, trace) != NULL){
 		sscanf(line, "%c; %c; %li; %u; %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time);
 
-		if(ioType == 'W')
-			(void) ssd.event_arrive(WRITE, vaddr, 1, arrive_time);
-
-		printf(line);
 		printf("%c %c %li %u %lf\n", ioPatternType, ioType, vaddr, queryTime, arrive_time);
+
+		if (ioType == 'R')
+		{
+			read_time += ssd.event_arrive(READ, vaddr, 1, arrive_time+2097152+1);
+			num_reads++;
+		}
+		else if(ioType == 'W')
+		{
+			write_time += ssd.event_arrive(WRITE, vaddr, 1, arrive_time+2097152+1);
+			num_writes++;
+		}
 	}
 
-//	printf("STARTING TRACE\n");
-//
-//	/* now rewind file and run trace */
-//	fseek(trace, 0, SEEK_SET);
-//	while(fgets(line, 80, trace) != NULL){
-//		sscanf(line, "%c; %c; %li; %u; %ld", &ioPatternType, &ioType, &vaddr, &queryTime, arrive_time);
-//		vaddr %= 65536;
-//		if(op == 0){
-//			write_time = ssd.event_arrive(WRITE, vaddr, size, arrive_time);
-//			if(write_time != 0){
-//				write_total += write_time;
-//				num_writes++;
-//			}
-//		} else if(op == 1){
-//			read_time = ssd.event_arrive(READ, vaddr, size, arrive_time);
-//			if(read_time != 0){
-//				read_total += read_time;
-//				num_reads++;
-//			}
-//		} else
-//			fprintf(stderr, "Bad operation in trace\n");
-//	}
 	printf("Num reads : %lu\n", num_reads);
-	printf("Num writes: %lu\n", num_reads);
+	printf("Num writes: %lu\n", num_writes);
 	printf("Avg read time : %.20lf\n", read_time / num_reads);
 	printf("Avg write time: %.20lf\n", write_time / num_writes);
 	return 0;
