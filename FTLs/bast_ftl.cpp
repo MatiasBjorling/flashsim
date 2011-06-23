@@ -146,9 +146,13 @@ enum status FtlImpl_Bast::read(Event &event)
 enum status FtlImpl_Bast::write(Event &event)
 {
 	LogPageBlock *logBlock = NULL;
+
 	long lba = (event.get_logical_address() >> addressShift);
-	Address eventAddress;
-	eventAddress.set_linear_address(event.get_logical_address());
+
+	Address eventAddress = Address(event.get_logical_address(), PAGE);
+
+	if (lba == 1951)
+		printf("wee-----------------------------------------\n");
 
 	if (log_map.find(lba) == log_map.end())
 		allocate_new_logblock(logBlock, lba, event);
@@ -158,7 +162,7 @@ enum status FtlImpl_Bast::write(Event &event)
 	logBlock = log_map[lba];
 
 	// Can it fit inside the existing log block. Issue the request.
-	uint numValid = controller.get_num_valid(&logBlock->address);
+ 	uint numValid = controller.get_num_valid(&logBlock->address);
 	if (numValid < BLOCK_SIZE)
 	{
 		logBlock->pages[eventAddress.page] = numValid;
@@ -245,7 +249,7 @@ enum status FtlImpl_Bast::trim(Event &event)
 }
 
 
-void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
+void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long lba, Event &event)
 {
 	if (log_map.size() >= BAST_LOG_PAGE_LIMIT)
 	{
@@ -260,16 +264,16 @@ void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long logicalBlo
 	logBlock->address = manager.get_free_block(LOG);
 
 	//printf("Using new log block with address: %lu Block: %u at logical address: %li\n", logBlock->address.get_linear_address(), logBlock->address.block, logicalBlockAddress);
-	log_map[logicalBlockAddress] = logBlock;
+	log_map[lba] = logBlock;
 }
 
-void FtlImpl_Bast::dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress)
+void FtlImpl_Bast::dispose_logblock(LogPageBlock *logBlock, long lba)
 {
-	log_map.erase(logicalBlockAddress);
+	log_map.erase(lba);
 	delete logBlock;
 }
 
-bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddress, Event &event)
+bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long lba, Event &event)
 {
 	// No page space. Merging required.
 	/* 1. Log block merge
@@ -278,29 +282,21 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddres
 
 	// Is block switch possible? i.e. log block switch
 	bool isSequential = true;
-	for (uint i=0;i<BLOCK_SIZE;i++)
-	{
-		if (logBlock->pages[i] != i)
-		{
-			isSequential = false;
-			break;
-		}
-	}
+	for (uint i=0;i<BLOCK_SIZE;i++) if (logBlock->pages[i] != i) { isSequential = false; break;	}
 
 	if (isSequential)
 	{
 		manager.promote_block(DATA);
 
 		// Add to empty list i.e. switch without erasing the datablock.
-		if (data_list[logicalBlockAddress] != -1)
+		if (data_list[lba] != -1)
 		{
-			Address address = Address(data_list[logicalBlockAddress], BLOCK);
+			Address address = Address(data_list[lba], BLOCK);
 			manager.invalidate(address, DATA);
 		}
 
-		data_list[logicalBlockAddress] = logBlock->address.get_linear_address();
-
-		dispose_logblock(logBlock, logicalBlockAddress);
+		data_list[lba] = logBlock->address.get_linear_address();
+		dispose_logblock(logBlock, lba);
 
 		manager.simulate_map_write(event);
 
@@ -310,7 +306,7 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long logicalBlockAddres
 	return isSequential;
 }
 
-bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event)
+bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 {
 	/* Do merge (n reads, n writes and 2 erases (gc'ed))
 	 * 1. Write page to new data block
@@ -327,14 +323,16 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 	Address newDataBlock = manager.get_free_block(DATA);
 	printf("Using new data block with address: %lu Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
 
+	Block *b = controller.get_block_pointer(newDataBlock);
+
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
 		// Lookup page table and see if page exist in log page
 		Address readAddress;
 		if (logBlock->pages[eventAddress.page] != -1)
 			readAddress.set_linear_address(logBlock->address.real_address + logBlock->pages[i], PAGE);
-		else if (data_list[logicalBlockAddress] != -1)
-			readAddress.set_linear_address(data_list[logicalBlockAddress] + i, PAGE);
+		else if (data_list[lba] != -1)
+			readAddress.set_linear_address(data_list[lba] + i, PAGE);
 		else
 			continue; // Empty page
 
@@ -363,14 +361,14 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 
 	// Invalidate inactive pages (LOG and DATA)
 	manager.invalidate(logBlock->address, LOG);
-	if (data_list[logicalBlockAddress] != -1)
+	if (data_list[lba] != -1)
 	{
-		Address dBlock = Address(data_list[logicalBlockAddress], BLOCK);
+		Address dBlock = Address(data_list[lba], BLOCK);
 		manager.invalidate(dBlock, DATA);
 	}
 
 	// Update mapping
-	data_list[logicalBlockAddress] = newDataBlock.get_linear_address();
+	data_list[lba] = newDataBlock.get_linear_address();
 
 	// Add erase events if necessary.
 	manager.insert_events(event);
@@ -378,7 +376,7 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long logicalBlockAddress
 	// Add write events if necessary.
 	manager.simulate_map_write(event);
 
-	dispose_logblock(logBlock, logicalBlockAddress);
+	dispose_logblock(logBlock, lba);
 
 	controller.stats.numLogMergeFull++;
 	return true;

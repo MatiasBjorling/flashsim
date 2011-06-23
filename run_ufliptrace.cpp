@@ -17,6 +17,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <string.h>
+#include <iostream>
+#include <vector>
+#include <algorithm>
 #include "ssd.h"
 
 using namespace ssd;
@@ -43,36 +49,71 @@ int main(int argc, char **argv){
 
 	Ssd ssd;
 
-	FILE *trace = NULL;
-	if((trace = fopen(argv[1], "r")) == NULL){
-		printf("Please provide trace file name\n");
+	printf("INITIALIZING SSD\n");
+
+//	for (int i=0; i<2048576;i++)
+//	{
+//		write_time += ssd.event_arrive(WRITE, i, 1, i*2);
+//	}
+
+	DIR *working_directory = NULL;
+	if ((working_directory = opendir(argv[1])) == NULL)
+	{
+		printf("Please provide trace file directory.\n");
 		exit(-1);
 	}
 
-	printf("INITIALIZING SSD\n");
-
-	for (int i=0; i<2097152;i++)
+	std::vector<std::string> files;
+	struct dirent *dirp;
+	while ((dirp = readdir(working_directory)) != NULL)
 	{
-		write_time += ssd.event_arrive(WRITE, i, 1, i*2);
+		if (dirp->d_type == DT_REG)
+			files.push_back(dirp->d_name);
 	}
 
-	/* first go through and write to all read addresses to prepare the SSD */
-	while(fgets(line, 80, trace) != NULL){
-		sscanf(line, "%c; %c; %li; %u; %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time);
+	std::sort(files.begin(), files.end());
 
-		printf("%c %c %li %u %lf\n", ioPatternType, ioType, vaddr, queryTime, arrive_time);
+	for (int i=0; i<files.size();i++)
+	{
+		char *filename = NULL;
+		asprintf(&filename, "%s%s", argv[1], files[i].c_str());
 
-		if (ioType == 'R')
-		{
-			read_time += ssd.event_arrive(READ, vaddr, 1, arrive_time+2097152+1);
-			num_reads++;
+		FILE *trace = NULL;
+		if((trace = fopen(filename, "r")) == NULL){
+			printf("File was moved or access was denied.\n");
+			exit(-1);
 		}
-		else if(ioType == 'W')
-		{
-			write_time += ssd.event_arrive(WRITE, vaddr, 1, arrive_time+2097152+1);
-			num_writes++;
+
+		printf("%s------------------------------------------------\n", files[i].c_str());
+
+		double start_time = arrive_time;
+		printf("%f\n", start_time);
+		/* first go through and write to all read addresses to prepare the SSD */
+		while(fgets(line, 80, trace) != NULL){
+			sscanf(line, "%c; %c; %li; %u; %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time);
+
+			printf("%c %c %li %u %lf\n", ioPatternType, ioType, vaddr, queryTime, arrive_time);
+
+			if (ioType == 'R')
+			{
+				read_time += ssd.event_arrive(READ, vaddr, 1, start_time+arrive_time+2097152+1);
+				num_reads++;
+			}
+			else if(ioType == 'W')
+			{
+				write_time += ssd.event_arrive(WRITE, vaddr, 1, start_time+arrive_time+2097152+1);
+				num_writes++;
+			}
 		}
+
+		fclose(trace);
 	}
+
+
+
+
+
+	closedir(working_directory);
 
 	printf("Num reads : %lu\n", num_reads);
 	printf("Num writes: %lu\n", num_writes);

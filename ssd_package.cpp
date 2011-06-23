@@ -189,7 +189,7 @@ enum block_state Package::get_block_state(const Address &address) const
 void Package::get_free_page(Address &address) const
 {
 	assert(address.die < size && address.valid >= DIE);
-	data[address.package].get_free_page(address);
+	data[address.die].get_free_page(address);
 	return;
 }
 ssd::uint Package::get_num_free(const Address &address) const

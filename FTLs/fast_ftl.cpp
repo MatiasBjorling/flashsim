@@ -330,6 +330,10 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 	if (sequential_logicalblock_address == -1)
 		return;
 
+
+	if (event.get_logical_address() == 270400)
+		printf("break\n");
+
 	// Do merge (n reads, n writes and 2 erases (gc'ed))
 	Address eventAddress;
 	eventAddress.set_linear_address(event.get_logical_address());

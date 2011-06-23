@@ -42,6 +42,7 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 
 	directoryCurrentPage = 0;
 	simpleCurrentFree = 0;
+	num_insert_events = 0;
 
 	return;
 }
@@ -186,6 +187,9 @@ void Block_manager::insert_events(Event &event)
 
 		Address address = new Address(invalid_list.back()->get_physical_address(), BLOCK);
 
+		if (address.get_linear_address() == 132416)
+			printf("w00t\n");
+
 		free_list.push_back(invalid_list.back());
 
 		invalid_list.pop_back();
@@ -205,7 +209,15 @@ void Block_manager::insert_events(Event &event)
 
 	// Then go though the active blocks via the priority queue of active pages.
 	// We limit it to page-mapping algorithms.
-	std::sort(active_list.begin(), active_list.end(), &block_comparitor);
+
+	if (num_insert_events % (BLOCK_SIZE*100) == 0)
+	{
+		std::sort(active_list.begin(), active_list.end(), &block_comparitor); // Do a full sort
+	} else {
+		if (active_list.size() > num_to_erase*2)
+			std::sort(active_list.begin(), active_list.begin()+num_to_erase*2, &block_comparitor); // Only sort the beginning of the list.
+	}
+
 	while (num_to_erase != 0 && active_list.size() > 1)
 	{
 //		int max = 10;
@@ -243,7 +255,7 @@ void Block_manager::insert_events(Event &event)
 		ftl.cleanup_block(event, blockErase);
 
 		// Create erase event and attach to current event queue.
-		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
+		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
 		Address address = Address(blockErase->get_physical_address(), BLOCK);
 		printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
 		erase_event.set_address(address);
@@ -261,6 +273,8 @@ void Block_manager::insert_events(Event &event)
 		ftl.controller.stats.numFTLErase++;
 	}
 
+
+	num_insert_events++;
 	//printf("A Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 }
 
@@ -285,7 +299,7 @@ Address Block_manager::get_free_block(block_type type)
 		break;
 	}
 
-	if (FTL_IMPLEMENTATION >= IMPL_DFTL)
+	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
 		active_list.push_back(ftl.get_block_pointer(address));
 
 	return address;
@@ -332,35 +346,36 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 
 void Block_manager::simulate_map_write(Event &events)
 {
-	Event eraseEvent = Event(ERASE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
-	Event writeEvent = Event(WRITE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
-
-	writeEvent.set_address(Address(map_offset + directoryCurrentPage, PAGE));
-
-	if (++directoryCurrentPage % BLOCK_SIZE == 0)
-	{
-		if (directoryCurrentPage == max_map_pages)
-			directoryCurrentPage = 0;
-
-		Address eraseAddress = Address(map_offset + directoryCurrentPage, BLOCK);
-		if (ftl.get_block_state(eraseAddress) == ACTIVE)
-		{
-			eraseEvent.set_address(eraseAddress);
-			eraseEvent.set_noop(true);
-
-			writeEvent.set_next(eraseEvent);
-
-			// Statistics
-			ftl.controller.stats.numGCErase++;
-		}
-	}
-
-	ftl.controller.issue(writeEvent);
-
-	events.consolidate_metaevent(writeEvent);
-
-	// Statistics
-	ftl.controller.stats.numGCWrite++;
+//	Event writeEvent = Event(WRITE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
+//	Event eraseEvent = Event(ERASE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
+//
+//	//writeEvent.set_address(Address(map_offset + directoryCurrentPage, PAGE));
+//	writeEvent.set_address(Address(0, PAGE));
+//	writeEvent.set_noop(true);
+//
+//	if (++directoryCurrentPage % BLOCK_SIZE == 0)
+//	{
+//		if (directoryCurrentPage == max_map_pages)
+//			directoryCurrentPage = 0;
+//
+//		//Address eraseAddress = Address(map_offset + directoryCurrentPage, BLOCK);
+//		eraseEvent.set_address(Address(0, PAGE));
+//		eraseEvent.set_noop(true);
+//
+//		writeEvent.set_next(eraseEvent);
+//
+//		// Statistics
+//		ftl.controller.stats.numGCErase++;
+//	}
+//
+//	if (ftl.controller.issue(writeEvent) == FAILURE)
+//		printf("Issue Error\n");
+//
+//	printf("%f\n",writeEvent.get_time_taken());
+//	events.consolidate_metaevent(writeEvent);
+//
+//	// Statistics
+//	ftl.controller.stats.numGCWrite++;
 }
 void Block_manager::simulate_map_read(Event &events)
 {

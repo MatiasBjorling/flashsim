@@ -101,6 +101,7 @@ enum status Block::write(Event &event)
 {
 	assert(data != NULL);
 	enum status ret = data[event.get_address().page]._write(event);
+
 	if(ret == SUCCESS && event.get_noop() == false)
 	{
 		pages_valid++;
@@ -125,23 +126,29 @@ enum status Block::_erase(Event &event)
 	assert(data != NULL && erase_delay >= 0.0);
 	uint i;
 
-	if(erases_remaining < 1)
+	if (!event.get_noop())
 	{
-		fprintf(stderr, "Block error: %s: No erases remaining when attempting to erase\n", __func__);
-		return FAILURE;
-	}
+		if(erases_remaining < 1)
+		{
+			fprintf(stderr, "Block error: %s: No erases remaining when attempting to erase\n", __func__);
+			return FAILURE;
+		}
 
-	for(i = 0; i < size; i++)
-	{
-		data[i].set_state(EMPTY);
+		for(i = 0; i < size; i++)
+		{
+			data[i].set_state(EMPTY);
+		}
+
+		event.incr_time_taken(erase_delay);
+		last_erase_time = event.get_start_time() + event.get_time_taken();
+		erases_remaining--;
+		pages_valid = 0;
+		pages_invalid = 0;
+		state = FREE;
 	}
 
 	event.incr_time_taken(erase_delay);
-	last_erase_time = event.get_start_time() + event.get_time_taken();
-	erases_remaining--;
-	pages_valid = 0;
-	pages_invalid = 0;
-	state = FREE;
+
 	return SUCCESS;
 }
 
@@ -229,8 +236,7 @@ enum status Block::get_next_page(Address &address) const
 	{
 		if(data[i].get_state() == EMPTY)
 		{
-			address.page = i;
-			address.valid = PAGE;
+			address.set_linear_address(i + physical_address - physical_address % BLOCK_SIZE, PAGE);
 			return SUCCESS;
 		}
 	}

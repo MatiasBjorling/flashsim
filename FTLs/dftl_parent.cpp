@@ -52,20 +52,16 @@ FtlImpl_DftlParent::MPage::MPage()
 FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	FtlParent(controller)
 {
-	// Trivial assumption checks
-	if (sizeof(int) != 4) assert("integer is not 4 bytes");
-
 	addressPerPage = 0;
-	addressSize = 32;
 
 	currentDataPage = -1;
 	currentTranslationPage = -1;
 
 	// Detect required number of bits for logical address size
-	//for (int size = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * 4; size > 0; addressSize++) size /= 2;
+	addressSize = log(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE)/log(2);
 
 	// Find required number of bits for block size
-	addressPerPage = (PAGE_SIZE/ceil(addressSize / 8.0)); // 8 bits per byte.
+	addressPerPage = (PAGE_SIZE/ceil(addressSize / 8.0)); // 8 bits per byte
 
 	printf("Total required bits for representation: Address size: %i Total per page: %i \n", addressSize, addressPerPage);
 
@@ -93,7 +89,8 @@ void FtlImpl_DftlParent::select_victim_entry(FtlImpl_DftlParent::MPage &mpage)
 	std::map<long, bool>::iterator i = cmt.begin();
 	while (i != cmt.end())
 	{
-		if (evictPageTime >= trans_map[cmt.begin()->first].modified_ts)
+		mpage = trans_map[i->first];
+		if (mpage.ppn != -1 && evictPageTime >= mpage.modified_ts)
 			evictPage = i->first;
 
 		++i;
@@ -126,7 +123,6 @@ void FtlImpl_DftlParent::reset_MPage(FtlImpl_DftlParent::MPage &mpage)
 {
 	mpage.create_ts = -1;
 	mpage.modified_ts = -1;
-	mpage.ppn = -1;
 }
 
 bool FtlImpl_DftlParent::lookup_CMT(long dlpn, Event &event)
@@ -182,6 +178,9 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 		{
 			trans_map[dlpn].modified_ts = event.get_start_time();
 
+			if (trans_map[dlpn].ppn == 83892)
+				printf("stop\n");
+
 			// Inform the ssd model that it should invalidate the previous page.
 			Address killAddress = Address(trans_map[dlpn].ppn, PAGE);
 			event.set_replace_address(killAddress);
@@ -206,8 +205,19 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 			{
 				// Evict page
 				// Inform the ssd model that it should invalidate the previous page.
-				Address killAddress = Address(evictPage.ppn, PAGE);
-				event.set_replace_address(killAddress);
+				// Calculate the start address of the translation page.
+				int vpnBase = evictPage.vpn - evictPage.vpn % addressPerPage;
+
+				for (int i=vpnBase;i<vpnBase+addressPerPage;i++)
+						trans_map[i].create_ts = trans_map[i].modified_ts;
+
+				// Simulate the write to translate page
+				Event write_event = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+				write_event.set_address(Address(0, PAGE));
+				write_event.set_noop(true);
+
+				controller.issue(write_event);
+				event.consolidate_metaevent(write_event);
 			}
 
 			// Remove page from cache.

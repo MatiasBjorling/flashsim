@@ -49,13 +49,12 @@ FtlImpl_BDftl::BPage::BPage()
 FtlImpl_BDftl::FtlImpl_BDftl(Controller &controller):
 	FtlImpl_DftlParent(controller)
 {
-
 	uint ssdBlockSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
 	block_map = new BPage[ssdBlockSize];
 	trim_map = new bool[ssdBlockSize*BLOCK_SIZE];
 
-	// TODO: Add SSDBlockSize to the calculation.
-	//printf("Total size to map: %uKB\n", ssdSize * PAGE_SIZE / 1024);
+	inuseBlock = NULL;
+
 	printf("Using BDFTL.\n");
 }
 
@@ -74,7 +73,7 @@ enum status FtlImpl_BDftl::read(Event &event)
 	uint dlbn = dlpn / BLOCK_SIZE;
 
 	// Block-level lookup
-	if (block_map[dlbn].optimal)
+ 	if (block_map[dlbn].optimal)
 	{
 		uint dppn = block_map[dlbn].pbn + (dlpn % BLOCK_SIZE);
 
@@ -109,6 +108,7 @@ enum status FtlImpl_BDftl::write(Event &event)
 {
 	uint dlpn = event.get_logical_address();
 	uint dlbn = dlpn / BLOCK_SIZE;
+	bool handled = false;
 
 	// Update trim map
 	trim_map[dlpn] = false;
@@ -119,59 +119,97 @@ enum status FtlImpl_BDftl::write(Event &event)
 		// Optimised case for block level lookup
 
 		// Get new block if necessary
-		if (block_map[dlbn].pbn == -1u)
+		if (block_map[dlbn].pbn == -1u && dlpn % BLOCK_SIZE == 0)
 			block_map[dlbn].pbn = manager.get_free_block(DATA).get_linear_address();
 
-		unsigned char dppn = dlpn % BLOCK_SIZE;
-		if (block_map[dlbn].nextPage == dppn)
+		if (block_map[dlbn].pbn != -1u)
 		{
-			controller.stats.numMemoryWrite++; // Update next page
-			event.incr_time_taken(RAM_WRITE_DELAY);
-			block_map[dlbn].nextPage++;
-			event.set_address(Address(block_map[dlbn].pbn + dppn, PAGE));
-		} else {
-			/*
-			 * Transfer the block to DFTL.
-			 * 1. Get number of pages to write
-			 * 2. Get start address for translation map
-			 * 3. Write mappings to trans_map
-			 * 4. Make block non-optimal
-			 * 5. Write the new I/O via DFTL
-			 */
-
-			// 1-3
-			uint numPages = block_map[dlbn].nextPage+1;
-			long startAdr = dlbn * BLOCK_SIZE;
-
-			for (uint i=0;i<numPages;i++)
+			unsigned char dppn = dlpn % BLOCK_SIZE;
+			if (block_map[dlbn].nextPage == dppn)
 			{
-				trans_map[startAdr+i].ppn = block_map[dlbn].pbn+i;
-				trans_map[startAdr+i].create_ts = event.get_start_time();
-				trans_map[startAdr+i].modified_ts = event.get_start_time() +1; // Have to be different for the block to be updated
-				cmt[startAdr+i] = true;
+				controller.stats.numMemoryWrite++; // Update next page
+				event.incr_time_taken(RAM_WRITE_DELAY);
+				block_map[dlbn].nextPage++;
+				event.set_address(Address(block_map[dlbn].pbn + dppn, PAGE));
+				handled = true;
+			} else {
+				/*
+				 * Transfer the block to DFTL.
+				 * 1. Get number of pages to write
+				 * 2. Get start address for translation map
+				 * 3. Write mappings to trans_map
+				 * 4. Make block non-optimal
+				 * 5. Add the block to the block queue to be used later
+				 */
 
+				// 1-3
+				uint numPages = block_map[dlbn].nextPage+1;
+				long startAdr = dlbn * BLOCK_SIZE;
+
+				for (uint i=0;i<numPages;i++)
+				{
+					trans_map[startAdr+i].ppn = block_map[dlbn].pbn+i;
+					trans_map[startAdr+i].create_ts = event.get_start_time();
+					trans_map[startAdr+i].modified_ts = event.get_start_time() +1; // Have to be different for the block to be updated
+					cmt[startAdr+i] = true;
+
+					event.incr_time_taken(RAM_WRITE_DELAY);
+					controller.stats.numMemoryWrite++;
+				}
+
+				// 4. Set block to non optimal
 				event.incr_time_taken(RAM_WRITE_DELAY);
 				controller.stats.numMemoryWrite++;
+				block_map[dlbn].optimal = false;
+
+				// 5. Add it to the queue to be used later.
+				Block *block = controller.get_block_pointer(Address(startAdr, BLOCK));
+				if (block->get_pages_valid() + block->get_pages_invalid() != 0)
+				{
+					if (inuseBlock == NULL)
+						inuseBlock = block;
+					else
+						blockQueue.push(block);
+				}
+
+
+				controller.stats.numPageBlockToPageConversion++;
 			}
-
-			// 4. Set block to non optimal
-			event.incr_time_taken(RAM_WRITE_DELAY);
-			controller.stats.numMemoryWrite++;
+		} else {
 			block_map[dlbn].optimal = false;
+		}
+	}
 
-			// 5. DFTL lookup
+	if (!handled)
+	{
+		// Get next available data page
+		if (inuseBlock == NULL)
+		{
+			// DFTL lookup
 			resolve_mapping(event, true);
 			trans_map[dlpn].ppn = get_free_data_page();
-			event.set_address(Address(trans_map[dlpn].ppn, PAGE));
-
-			controller.stats.numPageBlockToPageConversion++;
+		} else {
+			Address address;
+			if (inuseBlock->get_next_page(address) == SUCCESS)
+			{
+				trans_map[dlpn].ppn = address.get_linear_address();
+			} else {
+				if (blockQueue.size() != 0)
+				{
+					inuseBlock = blockQueue.front();
+					blockQueue.pop();
+					if (inuseBlock->get_next_page(address) == SUCCESS)
+						trans_map[dlpn].ppn = address.get_linear_address();
+					else
+						printf("break\n");
+				} else {
+					inuseBlock = NULL;
+					// DFTL lookup
+					resolve_mapping(event, true);
+					trans_map[dlpn].ppn = get_free_data_page();
+				}
+			}
 		}
-	} else {
-		// DFTL lookup
-		resolve_mapping(event, true);
-
-		// Get next available data page
-		trans_map[dlpn].ppn = get_free_data_page();
 
 		// Finish DFTL logic
 		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
@@ -265,6 +303,109 @@ enum status FtlImpl_BDftl::trim(Event &event)
 
 void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 {
-	return;
+	std::map<long, long> invalidated_translation;
+	/*
+	 * 1. Copy only valid pages in the victim block to the current data block
+	 * 2. Invalidate old pages
+	 * 3. mark their corresponding translation pages for update
+	 */
+	uint cnt=0;
+	for (uint i=0;i<BLOCK_SIZE;i++)
+	{
+		// When valid, two events are create, one for read and one for write. They are chained and the controller are
+		// called to execute them. The execution time is then added to the real event.
+		page_state ps = block->get_state(i);
+		printf("Zhe state: %i\n", ps);
+		if (block->get_state(i) == VALID)
+		{
+			Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
+
+			// Set up events.
+			readEvent.set_address(Address(block->get_physical_address()+i, PAGE));
+			readEvent.set_next(writeEvent);
+
+			// Setup the write event to read from the right place.
+			writeEvent.set_payload((char*)page_data + (block->get_physical_address()+i) * PAGE_SIZE);
+
+			// Get new address to write to and invalidate previous
+			Address dataBlockAddress = Address(get_free_data_page(), PAGE);
+			writeEvent.set_address(dataBlockAddress);
+			writeEvent.set_replace_address(Address(block->get_physical_address()+i, PAGE));
+
+			//printf("Write address %i to %i\n", readEvent.get_address().get_linear_address(), writeEvent.get_address().get_linear_address());
+
+			// Update GTD (A reverse map is much better. But not implemented at this moment. Maybe I do it later.
+			long dataPpn = dataBlockAddress.get_linear_address();
+			for (uint j=0;j<SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;j++)
+			{
+				if (trans_map[j].ppn == dataPpn)
+					invalidated_translation[trans_map[j].vpn] = dataPpn;
+			}
+
+			// Execute
+			if (controller.issue(readEvent) == FAILURE)
+				printf("Data block copy failed.");
+
+			event.consolidate_metaevent(readEvent);
+
+			// Statistics
+			controller.stats.numGCRead++;
+			controller.stats.numGCWrite++;
+			controller.stats.numMemoryRead++; // Block->get_state(i) == VALID
+			controller.stats.numMemoryWrite =+ 3; // GTD Update (2) + translation invalidate (1)
+
+			cnt++;
+		}
+	}
+
+	printf("GCed %u valid data pages.\n", cnt);
+
+	/*
+	 * Perform batch update on the marked translation pages
+	 * 1. Update GDT and CMT if necessary.
+	 * 2. Simulate translation page updates.
+	 */
+
+	std::map<long, bool> dirtied_translation_pages;
+
+	for (std::map<long, long>::const_iterator i = invalidated_translation.begin(); i!=invalidated_translation.end(); ++i)
+	{
+		long ppn = (*i).first;
+		long vpn = (*i).second;
+
+		// Update translation map ( it also updates the CMT, as it is stored inside the GDT )
+		trans_map[vpn].ppn = ppn;
+		trans_map[vpn].modified_ts = event.get_start_time();
+
+		dirtied_translation_pages[vpn/addressPerPage] = true;
+	}
+
+	for (std::map<long, bool>::const_iterator i = dirtied_translation_pages.begin(); i!=dirtied_translation_pages.end(); ++i)
+	{
+		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+
+		// Set up events.
+		readEvent.set_address(Address(0, PAGE));
+		readEvent.set_noop(true);
+		readEvent.set_next(writeEvent);
+
+		// Simulate the write.
+		writeEvent.set_address(Address(0, PAGE));
+		writeEvent.set_noop(true);
+
+		// Execute
+		if (controller.issue(readEvent) == FAILURE)
+			printf("Translation simulation block copy failed.");
+
+		event.consolidate_metaevent(readEvent);
+	}
+}
+
+// Returns true if the next page is in a new block
+bool FtlImpl_BDftl::block_next_new()
+{
+	return (currentDataPage == -1 || currentDataPage % BLOCK_SIZE == BLOCK_SIZE -1);
 }
 

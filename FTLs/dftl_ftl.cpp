@@ -81,7 +81,6 @@ enum status FtlImpl_Dftl::read(Event &event)
 enum status FtlImpl_Dftl::write(Event &event)
 {
 	uint dlpn = event.get_logical_address();
-
 	resolve_mapping(event, true);
 
 	// Get next available data page
@@ -129,121 +128,100 @@ enum status FtlImpl_Dftl::trim(Event &event)
 
 void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 {
-	if (block->get_block_type() == LOG)
+	std::map<long, long> invalidated_translation;
+	/*
+	 * 1. Copy only valid pages in the victim block to the current data block
+	 * 2. Invalidate old pages
+	 * 3. mark their corresponding translation pages for update
+	 */
+	uint cnt=0;
+	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
-		/*
-		 * Copy only valid pages in the victim block to the Current Translation Block
-		 * Invalidate old pages
-		 * Update GTD
-		 */
-		for (uint i=0;i<BLOCK_SIZE;i++)
-		{
-			if (block->get_state(i) == VALID)
-			{
-
-			}
-		}
-
-	}
-	else // Data block
-	{
-		std::map<long, long> invalidated_translation;
-		/*
-		 * 1. Copy only valid pages in the victim block to the current data block
-		 * 2. Invalidate old pages
-		 * 3. mark their corresponding translation pages for update
-		 */
-		uint cnt=0;
-		for (uint i=0;i<BLOCK_SIZE;i++)
-		{
-			// When valid, two events are create, one for read and one for write. They are chained and the controller are
-			// called to execute them. The execution time is then added to the real event.
-			if (block->get_state(i) == VALID)
-			{
-				Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
-				Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
-
-				// Set up events.
-				readEvent.set_address(Address(block->get_physical_address()+i, PAGE));
-				readEvent.set_next(writeEvent);
-
-				// Setup the write event to read from the right place.
-				writeEvent.set_payload((char*)page_data + (block->get_physical_address()+i) * PAGE_SIZE);
-
-				// Get new address to write to and invalidate previous
-				Address dataBlockAddress = Address(get_free_data_page(), PAGE);
-				writeEvent.set_address(dataBlockAddress);
-				writeEvent.set_replace_address(Address(block->get_physical_address()+i, PAGE));
-
-				//printf("Write address %i to %i\n", readEvent.get_address().get_linear_address(), writeEvent.get_address().get_linear_address());
-
-				// Update GTD (A reverse map is much better. But not implemented at this moment. Maybe I do it later.
-				long dataPpn = dataBlockAddress.get_linear_address();
-				for (uint j=0;j<SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;j++)
-				{
-					if (trans_map[j].ppn == dataPpn)
-						invalidated_translation[trans_map[j].vpn] = dataPpn;
-				}
-
-				// Execute
-				if (controller.issue(readEvent) == FAILURE)
-					printf("Data block copy failed.");
-
-				event.consolidate_metaevent(readEvent);
-
-				// Statistics
-				controller.stats.numGCRead++;
-				controller.stats.numGCWrite++;
-				controller.stats.numMemoryRead++; // Block->get_state(i) == VALID
-				controller.stats.numMemoryWrite =+ 3; // GTD Update (2) + translation invalidate (1)
-
-				cnt++;
-			}
-		}
-
-		printf("GCed %u valid data pages.\n", cnt);
-
-		/*
-		 * Perform batch update on the marked translation pages
-		 * 1. Update GDT and CMT if necessary.
-		 * 2. Simulate translation page updates.
-		 */
-
-		std::map<long, bool> dirtied_translation_pages;
-
-		for (std::map<long, long>::const_iterator i = invalidated_translation.begin(); i!=invalidated_translation.end(); ++i)
-		{
-			long ppn = (*i).first;
-			long vpn = (*i).second;
-
-			// Update translation map ( it also updates the CMT, as it is stored inside the GDT )
-			trans_map[vpn].ppn = ppn;
-			trans_map[vpn].modified_ts = event.get_start_time();
-
-			dirtied_translation_pages[vpn/addressPerPage] = true;
-		}
-
-		for (std::map<long, bool>::const_iterator i = dirtied_translation_pages.begin(); i!=dirtied_translation_pages.end(); ++i)
+		// When valid, two events are create, one for read and one for write. They are chained and the controller are
+		// called to execute them. The execution time is then added to the real event.
+		if (block->get_state(i) == VALID)
 		{
 			Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
-			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
 			// Set up events.
-			readEvent.set_address(Address(0, PAGE));
-			readEvent.set_noop(true);
+			readEvent.set_address(Address(block->get_physical_address()+i, PAGE));
 			readEvent.set_next(writeEvent);
 
-			// Simulate the write.
-			writeEvent.set_address(Address(0, PAGE));
-			writeEvent.set_noop(true);
+			// Setup the write event to read from the right place.
+			writeEvent.set_payload((char*)page_data + (block->get_physical_address()+i) * PAGE_SIZE);
+
+			// Get new address to write to and invalidate previous
+			Address dataBlockAddress = Address(get_free_data_page(), PAGE);
+			writeEvent.set_address(dataBlockAddress);
+			writeEvent.set_replace_address(Address(block->get_physical_address()+i, PAGE));
+
+			//printf("Write address %i to %i\n", readEvent.get_address().get_linear_address(), writeEvent.get_address().get_linear_address());
+
+			// Update GTD (A reverse map is much better. But not implemented at this moment. Maybe I do it later.
+			long dataPpn = dataBlockAddress.get_linear_address();
+			for (uint j=0;j<SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;j++)
+			{
+				if (trans_map[j].ppn == dataPpn)
+					invalidated_translation[trans_map[j].vpn] = dataPpn;
+			}
 
 			// Execute
 			if (controller.issue(readEvent) == FAILURE)
-				printf("Translation simulation block copy failed.");
+				printf("Data block copy failed.");
 
 			event.consolidate_metaevent(readEvent);
+
+			// Statistics
+			controller.stats.numGCRead++;
+			controller.stats.numGCWrite++;
+			controller.stats.numMemoryRead++; // Block->get_state(i) == VALID
+			controller.stats.numMemoryWrite =+ 3; // GTD Update (2) + translation invalidate (1)
+
+			cnt++;
 		}
 	}
 
-	return;
+	printf("GCed %u valid data pages.\n", cnt);
+
+	/*
+	 * Perform batch update on the marked translation pages
+	 * 1. Update GDT and CMT if necessary.
+	 * 2. Simulate translation page updates.
+	 */
+
+	std::map<long, bool> dirtied_translation_pages;
+
+	for (std::map<long, long>::const_iterator i = invalidated_translation.begin(); i!=invalidated_translation.end(); ++i)
+	{
+		long ppn = (*i).first;
+		long vpn = (*i).second;
+
+		// Update translation map ( it also updates the CMT, as it is stored inside the GDT )
+		trans_map[vpn].ppn = ppn;
+		trans_map[vpn].modified_ts = event.get_start_time();
+
+		dirtied_translation_pages[vpn/addressPerPage] = true;
+	}
+
+	for (std::map<long, bool>::const_iterator i = dirtied_translation_pages.begin(); i!=dirtied_translation_pages.end(); ++i)
+	{
+		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+
+		// Set up events.
+		readEvent.set_address(Address(0, PAGE));
+		readEvent.set_noop(true);
+		readEvent.set_next(writeEvent);
+
+		// Simulate the write.
+		writeEvent.set_address(Address(0, PAGE));
+		writeEvent.set_noop(true);
+
+		// Execute
+		if (controller.issue(readEvent) == FAILURE)
+			printf("Translation simulation block copy failed.");
+
+		event.consolidate_metaevent(readEvent);
+	}
 }

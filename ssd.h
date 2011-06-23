@@ -667,6 +667,9 @@ private:
 	ulong directoryCurrentPage;
 	// Address on the current cached page in SRAM.
 	ulong directoryCachedPage;
+
+	// Counter for handling periodic sort of active_list
+	uint num_insert_events;
 };
 
 
@@ -725,11 +728,11 @@ private:
 
 	long *data_list;
 
-	void dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress);
-	void allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
+	void dispose_logblock(LogPageBlock *logBlock, long lba);
+	void allocate_new_logblock(LogPageBlock *logBlock, long lba, Event &event);
 
-	bool is_sequential(LogPageBlock* logBlock, long logicalBlockaddress, Event &event);
-	bool random_merge(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
+	bool is_sequential(LogPageBlock* logBlock, long lba, Event &event);
+	bool random_merge(LogPageBlock *logBlock, long lba, Event &event);
 
 	int addressShift;
 	int addressSize;
@@ -803,7 +806,6 @@ protected:
 	long get_free_translation_page();
 	long get_free_data_page();
 
-
 	// Mapping information
 	int addressPerPage;
 	int addressSize;
@@ -845,6 +847,12 @@ private:
 
 	BPage *block_map;
 	bool *trim_map;
+
+	std::queue<Block*> blockQueue;
+
+
+	Block* inuseBlock;
+	bool block_next_new();
 };
 
 
