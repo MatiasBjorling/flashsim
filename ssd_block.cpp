@@ -50,7 +50,8 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 
 	/* assume hardware created at time 0 and had an implied free erasure */
 	last_erase_time(0.0),
-	erase_delay(erase_delay)
+	erase_delay(erase_delay),
+	physical_address(physical_address)
 {
 	uint i;
 
@@ -73,8 +74,6 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 	}
 	for(i = 0; i < size; i++)
 		(void) new (&data[i]) Page(*this, PAGE_READ_DELAY, PAGE_WRITE_DELAY);
-
-	this->physical_address = physical_address;
 
 	return;
 }

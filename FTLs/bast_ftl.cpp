@@ -151,9 +151,6 @@ enum status FtlImpl_Bast::write(Event &event)
 
 	Address eventAddress = Address(event.get_logical_address(), PAGE);
 
-	if (lba == 1951)
-		printf("wee-----------------------------------------\n");
-
 	if (log_map.find(lba) == log_map.end())
 		allocate_new_logblock(logBlock, lba, event);
 
@@ -318,12 +315,18 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	 * 6. put data and log block into the invalidate list.
 	 */
 
+	if (event.get_logical_address() == 246094)
+		printf("test\n");
+
 	Address eventAddress = Address(event.get_logical_address(), PAGE);
 
 	Address newDataBlock = manager.get_free_block(DATA);
 	printf("Using new data block with address: %lu Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
 
 	Block *b = controller.get_block_pointer(newDataBlock);
+
+	if (b->get_physical_address() == 8448)
+		printf("okay\n");
 
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
@@ -369,9 +372,6 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 
 	// Update mapping
 	data_list[lba] = newDataBlock.get_linear_address();
-
-	// Add erase events if necessary.
-	manager.insert_events(event);
 
 	// Add write events if necessary.
 	manager.simulate_map_write(event);

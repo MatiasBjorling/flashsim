@@ -632,7 +632,7 @@ public:
 	bool is_log_full();
 	void erase_and_invalidate(Event &event, Address &address, block_type btype);
 
-	// Map directory
+	// Block map directory
 	void simulate_map_write(Event &events);
 	void simulate_map_read(Event &events);
 private:

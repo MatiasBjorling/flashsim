@@ -66,9 +66,7 @@ Package::Package(const ssd::Ssd &parent, Channel &channel, uint package_size, lo
 	}
 
 	for(i = 0; i < size; i++)
-	{
-		(void) new (&data[i]) Die(*this, channel, DIE_SIZE, physical_address+(DIE_SIZE*PLANE_SIZE*i));
-	}
+		(void) new (&data[i]) Die(*this, channel, DIE_SIZE, physical_address+(DIE_SIZE*PLANE_SIZE*BLOCK_SIZE*i));
 
 	return;
 }

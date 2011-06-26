@@ -68,6 +68,11 @@ void Block_manager::get_page_block(Address &address)
 	{
 		assert(free_list.size() != 0);
 
+		if (free_list.front()->get_physical_address() == 8448)
+			printf("test\n");
+
+		printf("free_list size: %i\n", (int)free_list.size());
+
 		address.set_linear_address(free_list.front()->get_physical_address(), BLOCK);
 		free_list.erase(free_list.begin());
 	}
@@ -163,13 +168,13 @@ void Block_manager::insert_events(Event &event)
 
 	// Calculate if GC should be activated.
 	float used;
-	if (FTL_IMPLEMENTATION >= 3)
+	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
 	{
 		used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
 		if (active_list.size() % 100 == 0)
 			printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 	} else {
-		//printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+		printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 		used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
 	}
 	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
@@ -183,12 +188,12 @@ void Block_manager::insert_events(Event &event)
 	// First step and least expensive is to go though invalid list.
 	while (num_to_erase != 0 && invalid_list.size() != 0)
 	{
-		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
+		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
 
 		Address address = new Address(invalid_list.back()->get_physical_address(), BLOCK);
 
-		if (address.get_linear_address() == 132416)
-			printf("w00t\n");
+		if (invalid_list.back()->get_physical_address() == 8448)
+			printf("test\n");
 
 		free_list.push_back(invalid_list.back());
 
@@ -198,84 +203,76 @@ void Block_manager::insert_events(Event &event)
 
 		erase_event.set_address(address);
 
+		if (erase_event.get_address().get_linear_address() == 2088000)
+			printf("weee\n");
+
 		ftl.controller.issue(erase_event);
 		event.consolidate_metaevent(erase_event);
 
 		num_to_erase--;
 		ftl.controller.stats.numFTLErase++;
 	}
-
-	//printf("num of free pages: %i num of active pages: %i\n ", (int)free_list.size(), (int)active_list.size());
-
-	// Then go though the active blocks via the priority queue of active pages.
-	// We limit it to page-mapping algorithms.
-
-	if (num_insert_events % (BLOCK_SIZE*100) == 0)
-	{
-		std::sort(active_list.begin(), active_list.end(), &block_comparitor); // Do a full sort
-	} else {
-		if (active_list.size() > num_to_erase*2)
-			std::sort(active_list.begin(), active_list.begin()+num_to_erase*2, &block_comparitor); // Only sort the beginning of the list.
-	}
-
-	while (num_to_erase != 0 && active_list.size() > 1)
-	{
-//		int max = 10;
-//		if (active_list.size() <= 20)
-//			max = active_list.size()/2;
-
-//		for (int i=0;i<max;i++)
-//		{
-//			printf("Modi: %f Ratio: %i Block: %li \n", active_list[i]->get_modification_time(), active_list[i]->get_pages_invalid(), active_list[i]->get_physical_address());
-//		}
-//
-//		for (int i=0;i<max;i++)
-//		{
-//			printf("Modi: %f Ratio: %i Block: %li \n", active_list[active_list.size()-max+i]->get_modification_time(), active_list[active_list.size()-max+i]->get_pages_invalid(), active_list[active_list.size()-max+i]->get_physical_address());
-//		}
-
-		Block *blockErase = active_list.front();
-
-		// If there is no gain, then don't move the pages.
-		if (blockErase->get_pages_invalid() == 0)
-		{
-			num_to_erase--;
-			continue;
-		}
-
-
-		if (blockErase->get_physical_address() == event.get_address().get_linear_address() - event.get_address().get_linear_address() % BLOCK_SIZE)
-		{
-			blockErase = active_list[1];
-			active_list.erase(active_list.begin()+1);
-		} else
-			active_list.erase(active_list.begin());
-
-		// Let the FTL handle cleanup of the block.
-		ftl.cleanup_block(event, blockErase);
-
-		// Create erase event and attach to current event queue.
-		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
-		Address address = Address(blockErase->get_physical_address(), BLOCK);
-		printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
-		erase_event.set_address(address);
-
-		free_list.push_back(blockErase);
-
-		printf("free_list size: %i\n", (int)free_list.size());
-
-		// Execute erase
-		ftl.controller.issue(erase_event);
-
-		event.consolidate_metaevent(erase_event);
-
-		num_to_erase--;
-		ftl.controller.stats.numFTLErase++;
-	}
-
 
 	num_insert_events++;
-	//printf("A Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+
+
+	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
+	{
+		// Then go though the active blocks via the priority queue of active pages.
+		// We limit it to page-mapping algorithms.
+
+		if (num_insert_events % (BLOCK_SIZE*100) == 0)
+		{
+			std::sort(active_list.begin(), active_list.end(), &block_comparitor); // Do a full sort
+		} else {
+			if (active_list.size() > num_to_erase*2)
+				std::sort(active_list.begin(), active_list.begin()+num_to_erase*2, &block_comparitor); // Only sort the beginning of the list.
+		}
+
+		while (num_to_erase != 0 && active_list.size() > 1)
+		{
+			Block *blockErase = active_list.front();
+
+			// If there is no gain, then don't move the pages.
+			if (blockErase->get_pages_invalid() == 0)
+			{
+				num_to_erase--;
+				continue;
+			}
+
+
+			if (blockErase->get_physical_address() == event.get_address().get_linear_address() - event.get_address().get_linear_address() % BLOCK_SIZE)
+			{
+				blockErase = active_list[1];
+				active_list.erase(active_list.begin()+1);
+			} else
+				active_list.erase(active_list.begin());
+
+			// Let the FTL handle cleanup of the block.
+			ftl.cleanup_block(event, blockErase);
+
+			// Create erase event and attach to current event queue.
+			Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
+			Address address = Address(blockErase->get_physical_address(), BLOCK);
+			printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
+			erase_event.set_address(address);
+
+			if (blockErase->get_physical_address() == 8448)
+				printf("test\n");
+
+			free_list.push_back(blockErase);
+
+			printf("free_list size: %i\n", (int)free_list.size());
+
+			// Execute erase
+			ftl.controller.issue(erase_event);
+
+			event.consolidate_metaevent(erase_event);
+
+			num_to_erase--;
+			ftl.controller.stats.numFTLErase++;
+		}
+	}
 }
 
 Address Block_manager::get_free_block(block_type type)
@@ -300,7 +297,10 @@ Address Block_manager::get_free_block(block_type type)
 	}
 
 	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
+	{
 		active_list.push_back(ftl.get_block_pointer(address));
+	}
+
 
 	return address;
 }
@@ -310,17 +310,18 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 	Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 
 	Block *block = ftl.get_block_pointer(address);
+
+	if (block->get_physical_address() == 8448)
+		printf("test\n");
+
 	free_list.push_back(block);
 
 	if (FTL_IMPLEMENTATION >= IMPL_DFTL)
 	{
-
 		std::vector<Block*>::iterator result = std::find(active_list.begin(), active_list.end(), block);
 		if (result != active_list.end())
 			active_list.erase(result);
 	}
-
-
 
 	printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
 
@@ -379,17 +380,17 @@ void Block_manager::simulate_map_write(Event &events)
 }
 void Block_manager::simulate_map_read(Event &events)
 {
-	ulong inside_block = events.get_address().get_linear_address() / BLOCK_SIZE;
-	if (!(directoryCachedPage >= inside_block && (directoryCachedPage + map_space_capacity) > inside_block))
-	{
-		Event readEvent = Event(READ, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
-		readEvent.set_address(Address(0, PAGE));
-		readEvent.set_noop(true);
-
-		ftl.controller.issue(readEvent);
-
-		events.consolidate_metaevent(readEvent);
-
-		ftl.controller.stats.numGCRead++;
-	}
+//	ulong inside_block = events.get_address().get_linear_address() / BLOCK_SIZE;
+//	if (!(directoryCachedPage >= inside_block && (directoryCachedPage + map_space_capacity) > inside_block))
+//	{
+//		Event readEvent = Event(READ, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
+//		readEvent.set_address(Address(0, PAGE));
+//		readEvent.set_noop(true);
+//
+//		ftl.controller.issue(readEvent);
+//
+//		events.consolidate_metaevent(readEvent);
+//
+//		ftl.controller.stats.numGCRead++;
+//	}
 }

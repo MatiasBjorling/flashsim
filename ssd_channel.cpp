@@ -183,6 +183,9 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 	if(table_entries >= table_size)
 		throw std::overflow_error("table_entries >= table_size. Increase bus table size");
 	
+	if (table_entries > 530)
+		printf("stop\n");
+
 	uint i = 0;
 	double sched_time = BUS_CHANNEL_FREE_FLAG;
 

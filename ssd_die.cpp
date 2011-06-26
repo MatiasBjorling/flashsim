@@ -70,7 +70,7 @@ Die::Die(const Package &parent, Channel &channel, uint die_size, long physical_a
 
 
 	for(i = 0; i < size; i++)
-		(void) new (&data[i]) Plane(*this, PLANE_SIZE, PLANE_REG_READ_DELAY, PLANE_REG_WRITE_DELAY, physical_address+(PLANE_SIZE*i));
+		(void) new (&data[i]) Plane(*this, PLANE_SIZE, PLANE_REG_READ_DELAY, PLANE_REG_WRITE_DELAY, physical_address+(PLANE_SIZE*BLOCK_SIZE*i));
 
 	return;
 }
