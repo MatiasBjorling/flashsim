@@ -51,10 +51,10 @@ int main(int argc, char **argv){
 
 	printf("INITIALIZING SSD\n");
 
-//	for (int i=0; i<2048576;i++)
-//	{
-//		write_time += ssd.event_arrive(WRITE, i, 1, i*2);
-//	}
+	for (int i=0; i<2048576;i++)
+	{
+		write_time += ssd.event_arrive(WRITE, i, 1, i*500);
+	}
 
 	DIR *working_directory = NULL;
 	if ((working_directory = opendir(argv[1])) == NULL)
@@ -73,6 +73,9 @@ int main(int argc, char **argv){
 
 	std::sort(files.begin(), files.end());
 
+	long cnt=0;
+
+	double start_time = 1024288000;
 	for (int i=0; i<files.size();i++)
 	{
 		char *filename = NULL;
@@ -86,32 +89,27 @@ int main(int argc, char **argv){
 
 		printf("%s------------------------------------------------\n", files[i].c_str());
 
-		double start_time = arrive_time;
-		printf("%f\n", start_time);
+		start_time = start_time + arrive_time;
 		/* first go through and write to all read addresses to prepare the SSD */
 		while(fgets(line, 80, trace) != NULL){
-			sscanf(line, "%c; %c; %li; %u; %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time);
+			sscanf(line, "%c; %c; %li; %u; %lf, %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time, start_time+arrive_time);
 
-			printf("%c %c %li %u %lf\n", ioPatternType, ioType, vaddr, queryTime, arrive_time);
+			printf("%li %c %c %li %u %lf %lf\n", ++cnt, ioPatternType, ioType, vaddr, queryTime, arrive_time, start_time+arrive_time);
 
 			if (ioType == 'R')
 			{
-				read_time += ssd.event_arrive(READ, vaddr, 1, start_time+arrive_time+2097152+1);
+				read_time += ssd.event_arrive(READ, vaddr, 1, start_time+arrive_time);
 				num_reads++;
 			}
 			else if(ioType == 'W')
 			{
-				write_time += ssd.event_arrive(WRITE, vaddr, 1, start_time+arrive_time+2097152+1);
+				write_time += ssd.event_arrive(WRITE, vaddr, 1, start_time+arrive_time);
 				num_writes++;
 			}
 		}
 
 		fclose(trace);
 	}
-
-
-
-
 
 	closedir(working_directory);
 

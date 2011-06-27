@@ -44,9 +44,6 @@ FtlImpl_Fast::FtlImpl_Fast(Controller &controller):
 
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
 
-	// Trivial assumption checks
-	if (sizeof(int) != 4) assert("integer is not 4 bytes");
-
 	// Initialise block mapping table.
 	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
 	data_list = new long[numBlocks];

@@ -178,9 +178,6 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 		{
 			trans_map[dlpn].modified_ts = event.get_start_time();
 
-			if (trans_map[dlpn].ppn == 83892)
-				printf("stop\n");
-
 			// Inform the ssd model that it should invalidate the previous page.
 			Address killAddress = Address(trans_map[dlpn].ppn, PAGE);
 			event.set_replace_address(killAddress);

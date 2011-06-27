@@ -391,9 +391,18 @@ public:
 	enum status disconnect(void);
 private:
 	void unlock(double current_time);
-	uint table_size;
-	double * const lock_time;
-	double * const unlock_time;
+//	uint table_size;
+
+	struct lock_times {
+		double lock_time;
+		double unlock_time;
+	};
+
+	//lock_times* const timings;
+
+	static bool timings_sorter(lock_times const& lhs, lock_times const& rhs);
+	std::vector<lock_times> timings;
+
 	uint table_entries;
 	uint selected_entry;
 	uint num_connected;

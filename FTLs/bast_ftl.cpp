@@ -314,19 +314,8 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	 * 5. promote new block as data block
 	 * 6. put data and log block into the invalidate list.
 	 */
-
-	if (event.get_logical_address() == 246094)
-		printf("test\n");
-
 	Address eventAddress = Address(event.get_logical_address(), PAGE);
-
 	Address newDataBlock = manager.get_free_block(DATA);
-	printf("Using new data block with address: %lu Block: %u\n", newDataBlock.get_linear_address(), newDataBlock.block);
-
-	Block *b = controller.get_block_pointer(newDataBlock);
-
-	if (b->get_physical_address() == 8448)
-		printf("okay\n");
 
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
@@ -343,19 +332,16 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 			continue;
 
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
-		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
-
 		readEvent.set_address(readAddress);
-
-		Address dataBlockAddress = Address(newDataBlock.get_linear_address() + i, PAGE);
-		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
-		writeEvent.set_address(dataBlockAddress);
-
-		readEvent.set_next(writeEvent);
-
 		controller.issue(readEvent);
-
 		event.consolidate_metaevent(readEvent);
+
+		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
+		writeEvent.set_address(Address(newDataBlock.get_linear_address() + i, PAGE));
+		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+		controller.issue(writeEvent);
+
+		event.consolidate_metaevent(writeEvent);
 
 		// Statistics
 		controller.stats.numFTLRead++;

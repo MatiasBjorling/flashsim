@@ -67,12 +67,6 @@ void Block_manager::get_page_block(Address &address)
 	else
 	{
 		assert(free_list.size() != 0);
-
-		if (free_list.front()->get_physical_address() == 8448)
-			printf("test\n");
-
-		printf("free_list size: %i\n", (int)free_list.size());
-
 		address.set_linear_address(free_list.front()->get_physical_address(), BLOCK);
 		free_list.erase(free_list.begin());
 	}
@@ -171,10 +165,10 @@ void Block_manager::insert_events(Event &event)
 	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
 	{
 		used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
-		if (active_list.size() % 100 == 0)
-			printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+//		if (active_list.size() % 100 == 0)
+//			printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 	} else {
-		printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+		//printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 		used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
 	}
 	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
@@ -192,19 +186,13 @@ void Block_manager::insert_events(Event &event)
 
 		Address address = new Address(invalid_list.back()->get_physical_address(), BLOCK);
 
-		if (invalid_list.back()->get_physical_address() == 8448)
-			printf("test\n");
-
 		free_list.push_back(invalid_list.back());
 
 		invalid_list.pop_back();
 
-		printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
+		//printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
 
 		erase_event.set_address(address);
-
-		if (erase_event.get_address().get_linear_address() == 2088000)
-			printf("weee\n");
 
 		ftl.controller.issue(erase_event);
 		event.consolidate_metaevent(erase_event);
@@ -254,15 +242,10 @@ void Block_manager::insert_events(Event &event)
 			// Create erase event and attach to current event queue.
 			Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
 			Address address = Address(blockErase->get_physical_address(), BLOCK);
-			printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
+			//printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
 			erase_event.set_address(address);
 
-			if (blockErase->get_physical_address() == 8448)
-				printf("test\n");
-
 			free_list.push_back(blockErase);
-
-			printf("free_list size: %i\n", (int)free_list.size());
 
 			// Execute erase
 			ftl.controller.issue(erase_event);
@@ -311,9 +294,6 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 
 	Block *block = ftl.get_block_pointer(address);
 
-	if (block->get_physical_address() == 8448)
-		printf("test\n");
-
 	free_list.push_back(block);
 
 	if (FTL_IMPLEMENTATION >= IMPL_DFTL)
@@ -323,7 +303,7 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 			active_list.erase(result);
 	}
 
-	printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
+	//printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
 
 	erase_event.set_address(address);
 
