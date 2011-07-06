@@ -25,26 +25,23 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 	 * User-space is the number of blocks minus the
 	 * requirements for map directory.
 	 */
-	if (FTL_IMPLEMENTATION == IMPL_FAST || FTL_IMPLEMENTATION == IMPL_BAST)
-		max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE - MAP_DIRECTORY_SIZE;
-	else
-		max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
 
-	if (FTL_IMPLEMENTATION == IMPL_FAST) // FAST
+	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
+	max_log_blocks = max_blocks;
+
+	if (FTL_IMPLEMENTATION == IMPL_FAST)
 		max_log_blocks = FAST_LOG_PAGE_LIMIT;
-	else
-		max_log_blocks = max_blocks;
 
+	// Block-based map lookup simulation
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
-	map_offset = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE*BLOCK_SIZE - max_map_pages;
-
-	map_space_capacity = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE / (SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE * 32 / 8 / PAGE_SIZE);
+	//map_space_capacity = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE / (SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE * 32 / 8 / PAGE_SIZE);
 
 	directoryCurrentPage = 0;
 	simpleCurrentFree = 0;
 	num_insert_events = 0;
 
-	return;
+	data_active = 0;
+	log_active = 0;
 }
 
 Block_manager::~Block_manager(void)
@@ -59,7 +56,7 @@ Block_manager::~Block_manager(void)
  */
 void Block_manager::get_page_block(Address &address)
 {
-	if ((simpleCurrentFree/BLOCK_SIZE) < max_blocks)
+	if (simpleCurrentFree < max_blocks*BLOCK_SIZE)
 	{
 		address.set_linear_address(simpleCurrentFree, BLOCK);
 		simpleCurrentFree += BLOCK_SIZE;
@@ -116,7 +113,7 @@ void Block_manager::print_statistics()
 	printf("-----------------\n");
 }
 
-void Block_manager::invalidate(Address &address, block_type type)
+void Block_manager::invalidate(Address address, block_type type)
 {
 	invalid_list.push_back(ftl.get_block_pointer(address));
 
@@ -165,8 +162,8 @@ void Block_manager::insert_events(Event &event)
 	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
 	{
 		used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
-//		if (active_list.size() % 100 == 0)
-//			printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+		//if (active_list.size() % 10 == 0)
+			//printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 	} else {
 		//printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 		used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
@@ -183,20 +180,15 @@ void Block_manager::insert_events(Event &event)
 	while (num_to_erase != 0 && invalid_list.size() != 0)
 	{
 		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
-
-		Address address = new Address(invalid_list.back()->get_physical_address(), BLOCK);
+		erase_event.set_address(Address(invalid_list.back()->get_physical_address(), BLOCK));
+		ftl.controller.issue(erase_event);
+		event.incr_time_taken(erase_event.get_time_taken());
+		//event.consolidate_metaevent(erase_event);
 
 		free_list.push_back(invalid_list.back());
-
 		invalid_list.pop_back();
 
 		//printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
-
-		erase_event.set_address(address);
-
-		ftl.controller.issue(erase_event);
-		event.consolidate_metaevent(erase_event);
-
 		num_to_erase--;
 		ftl.controller.stats.numFTLErase++;
 	}
@@ -208,14 +200,10 @@ void Block_manager::insert_events(Event &event)
 	{
 		// Then go though the active blocks via the priority queue of active pages.
 		// We limit it to page-mapping algorithms.
-
 		if (num_insert_events % (BLOCK_SIZE*100) == 0)
-		{
 			std::sort(active_list.begin(), active_list.end(), &block_comparitor); // Do a full sort
-		} else {
-			if (active_list.size() > num_to_erase*2)
-				std::sort(active_list.begin(), active_list.begin()+num_to_erase*2, &block_comparitor); // Only sort the beginning of the list.
-		}
+		else if (active_list.size() > num_to_erase*2)
+			std::sort(active_list.begin(), active_list.begin()+num_to_erase*2, &block_comparitor); // Only sort the beginning of the list.
 
 		while (num_to_erase != 0 && active_list.size() > 1)
 		{
@@ -241,16 +229,15 @@ void Block_manager::insert_events(Event &event)
 
 			// Create erase event and attach to current event queue.
 			Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
-			Address address = Address(blockErase->get_physical_address(), BLOCK);
-			//printf("Erasing address: %lu Block: %u\n", blockErase->get_physical_address(), address.block);
-			erase_event.set_address(address);
+			erase_event.set_address(Address(blockErase->get_physical_address(), BLOCK));
 
 			free_list.push_back(blockErase);
 
 			// Execute erase
 			ftl.controller.issue(erase_event);
 
-			event.consolidate_metaevent(erase_event);
+			event.incr_time_taken(erase_event.get_time_taken());
+			//event.consolidate_metaevent(erase_event);
 
 			num_to_erase--;
 			ftl.controller.stats.numFTLErase++;
@@ -280,10 +267,7 @@ Address Block_manager::get_free_block(block_type type)
 	}
 
 	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
-	{
 		active_list.push_back(ftl.get_block_pointer(address));
-	}
-
 
 	return address;
 }
@@ -308,8 +292,8 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 	erase_event.set_address(address);
 
 	ftl.controller.issue(erase_event);
-	event.consolidate_metaevent(erase_event);
-
+	//event.consolidate_metaevent(erase_event);
+	event.incr_time_taken(erase_event.get_time_taken());
 	ftl.controller.stats.numFTLErase++;
 
 	switch (btype)
@@ -323,6 +307,14 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 	case LOG_SEQ:
 		break;
 	}
+}
+
+int Block_manager::get_num_free_blocks()
+{
+	if (simpleCurrentFree < max_blocks*BLOCK_SIZE)
+		return (simpleCurrentFree / BLOCK_SIZE) + free_list.size();
+	else
+		return free_list.size();
 }
 
 void Block_manager::simulate_map_write(Event &events)

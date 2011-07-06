@@ -76,6 +76,8 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	for (uint i=0;i<ssdSize;i++)
 		trans_map[i].vpn = i;
 
+	reverse_trans_map = new long[ssdSize];
+
 	return;
 }
 
@@ -114,8 +116,8 @@ void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
 	readEvent.set_noop(true);
 
 	controller.issue(readEvent);
-	event.consolidate_metaevent(readEvent);
-
+	//event.consolidate_metaevent(readEvent);
+	event.incr_time_taken(readEvent.get_time_taken());
 	controller.stats.numFTLRead++;
 }
 
@@ -159,6 +161,7 @@ long FtlImpl_DftlParent::get_free_data_page()
 FtlImpl_DftlParent::~FtlImpl_DftlParent(void)
 {
 	delete[] trans_map;
+	delete[] reverse_trans_map;
 }
 
 void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
@@ -214,7 +217,8 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 				write_event.set_noop(true);
 
 				controller.issue(write_event);
-				event.consolidate_metaevent(write_event);
+				event.incr_time_taken(write_event.get_time_taken());
+				//event.consolidate_metaevent(write_event);
 			}
 
 			// Remove page from cache.
@@ -224,4 +228,10 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 
 		cmt[dlpn] = true;
 	}
+}
+
+void FtlImpl_DftlParent::update_translation_map(long lpn, long ppn)
+{
+	trans_map[lpn].ppn = ppn;
+	reverse_trans_map[ppn] = lpn;
 }

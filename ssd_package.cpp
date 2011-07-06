@@ -145,6 +145,8 @@ ssd::ulong Package::get_erases_remaining(const Address &address) const
 
 ssd::uint ssd::Package::get_num_invalid(const Address & address) const
 {
+	assert(address.valid >= DIE);
+	return data[address.die].get_num_invalid(address);
 }
 
 /* Plane with the most erases remaining is the least worn */

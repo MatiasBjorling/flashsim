@@ -85,7 +85,7 @@ enum status FtlImpl_Dftl::write(Event &event)
 
 	// Get next available data page
 	long replace_page = trans_map[dlpn].ppn;
-	trans_map[dlpn].ppn = get_free_data_page();
+	update_translation_map(dlpn, get_free_data_page()); //trans_map[dlpn].ppn = get_free_data_page();
 
 	event.set_address(Address(trans_map[dlpn].ppn, PAGE));
 
@@ -113,7 +113,8 @@ enum status FtlImpl_Dftl::trim(Event &event)
 		Address address = Address(trans_map[dlpn].ppn, PAGE);
 		Block *block = controller.get_block_pointer(address);
 		block->invalidate_page(address.page);
-		trans_map[dlpn].ppn = -1;
+		update_translation_map(dlpn, -1);
+		//trans_map[dlpn].ppn = -1;
 		trans_map[dlpn].modified_ts = -1;
 		trans_map[dlpn].modified_ts = -1;
 	}
@@ -149,7 +150,7 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 			if (controller.issue(readEvent) == FAILURE)
 				printf("Data block copy failed.");
 
-			event.consolidate_metaevent(readEvent);
+			//event.consolidate_metaevent(readEvent);
 
 			// Get new address to write to and invalidate previous
 			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
@@ -163,17 +164,20 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 			if (controller.issue(writeEvent) == FAILURE)
 				printf("Data block copy failed.");
 
-			event.consolidate_metaevent(writeEvent);
+			//event.consolidate_metaevent(writeEvent);
+
+			event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
 
 			//printf("Write address %i to %i\n", readEvent.get_address().get_linear_address(), writeEvent.get_address().get_linear_address());
 
 			// Update GTD (A reverse map is much better. But not implemented at this moment. Maybe I do it later.
 			long dataPpn = dataBlockAddress.get_linear_address();
-			for (uint j=0;j<SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;j++)
-			{
-				if (trans_map[j].ppn == dataPpn)
-					invalidated_translation[trans_map[j].vpn] = dataPpn;
-			}
+			invalidated_translation[reverse_trans_map[dataPpn]] = dataPpn;
+//			for (uint j=0;j<SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;j++)
+//			{
+//				if (trans_map[j].ppn == dataPpn)
+//					invalidated_translation[trans_map[j].vpn] = dataPpn;
+//			}
 
 			// Statistics
 			controller.stats.numGCRead++;
@@ -201,7 +205,8 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 		long vpn = (*i).second;
 
 		// Update translation map ( it also updates the CMT, as it is stored inside the GDT )
-		trans_map[vpn].ppn = ppn;
+		update_translation_map(vpn, ppn);
+		//trans_map[vpn].ppn = ppn;
 		trans_map[vpn].modified_ts = event.get_start_time();
 
 		dirtied_translation_pages[vpn/addressPerPage] = true;
@@ -217,7 +222,7 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 		if (controller.issue(readEvent) == FAILURE)
 			printf("Translation simulation block copy failed.");
 
-		event.consolidate_metaevent(readEvent);
+		//event.consolidate_metaevent(readEvent);
 
 		// Simulate the write.
 		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
@@ -228,6 +233,8 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 		if (controller.issue(writeEvent) == FAILURE)
 			printf("Translation simulation block copy failed.");
 
-		event.consolidate_metaevent(writeEvent);
+		//event.consolidate_metaevent(writeEvent);
+
+		event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
 	}
 }

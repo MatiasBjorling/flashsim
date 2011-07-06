@@ -78,18 +78,6 @@ void Event::consolidate_metaevent(Event &list)
 	}
 	time_taken = max;
 
-//	assert(start_time >= 0);
-//
-//	/* find max time taken with respect to this event's start_time */
-//	max = list.start_time + list.time_taken;
-//	for(cur = list.next; cur != NULL; cur = cur -> next)
-//	{
-//		tmp = cur -> start_time + cur -> time_taken;
-//		if(tmp > max)
-//			max = tmp;
-//		bus_wait_time += cur -> get_bus_wait_time();
-//	}
-//	time_taken = max;
 	assert(time_taken >= 0);
 	assert(bus_wait_time >= 0);
 	return;

@@ -51,10 +51,10 @@ int main(int argc, char **argv){
 
 	printf("INITIALIZING SSD\n");
 
-	for (int i=0; i<2048576;i++)
-	{
-		write_time += ssd.event_arrive(WRITE, i, 1, i*500);
-	}
+//	for (int i=0; i<2048576;i++)
+//	{
+//		write_time += ssd.event_arrive(WRITE, i, 1, i*500);
+//	}
 
 	DIR *working_directory = NULL;
 	if ((working_directory = opendir(argv[1])) == NULL)
@@ -87,14 +87,14 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		printf("%s------------------------------------------------\n", files[i].c_str());
+		printf("-__- %s -__-\n", files[i].c_str());
 
 		start_time = start_time + arrive_time;
 		/* first go through and write to all read addresses to prepare the SSD */
 		while(fgets(line, 80, trace) != NULL){
 			sscanf(line, "%c; %c; %li; %u; %lf, %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time, start_time+arrive_time);
 
-			printf("%li %c %c %li %u %lf %lf\n", ++cnt, ioPatternType, ioType, vaddr, queryTime, arrive_time, start_time+arrive_time);
+			//printf("%li %c %c %li %u %lf %lf %li\n", ++cnt, ioPatternType, ioType, vaddr, queryTime, arrive_time, start_time+arrive_time);
 
 			if (ioType == 'R')
 			{

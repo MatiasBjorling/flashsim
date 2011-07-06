@@ -312,7 +312,7 @@ public:
 	~LogPageBlock(void);
 
 	int *pages;
-	ulong *aPages;
+	long *aPages;
 	Address address;
 	int numPages;
 
@@ -634,7 +634,7 @@ public:
 	// Usual suspects
 	Address get_free_block();
 	Address get_free_block(block_type btype);
-	void invalidate(Address &address, block_type btype);
+	void invalidate(Address address, block_type btype);
 	void print_statistics();
 	void insert_events(Event &event);
 	void promote_block(block_type to_type);
@@ -644,6 +644,8 @@ public:
 	// Block map directory
 	void simulate_map_write(Event &events);
 	void simulate_map_read(Event &events);
+
+	int get_num_free_blocks();
 private:
 	void get_page_block(Address &address);
 	static bool block_comparitor (Block const *x,Block const *y);
@@ -658,7 +660,6 @@ private:
 	ulong max_blocks;
 
 	ulong max_map_pages;
-	ulong map_offset;
 	ulong map_space_capacity;
 
 	// Cost/Benefit priority queue.
@@ -761,9 +762,7 @@ private:
 	std::map<long, LogPageBlock*> log_map;
 
 	long *data_list;
-
-	void dispose_logblock(LogPageBlock *logBlock, long logicalBlockAddress);
-	void allocate_new_logblock(LogPageBlock *logBlock, long logicalBlockAddress, Event &event);
+	bool *pin_list;
 
 	bool write_to_log_block(Event &event, long logicalBlockAddress);
 
@@ -802,6 +801,7 @@ protected:
 
 	std::map<long, bool> cmt;
 	MPage *trans_map;
+	long *reverse_trans_map;
 
 	void select_victim_entry(FtlImpl_DftlParent::MPage &mpage);
 	void consult_GTD(long dppn, Event &event);
@@ -809,6 +809,7 @@ protected:
 	void remove_victims(FtlImpl_DftlParent::MPage &mpage);
 
 	void resolve_mapping(Event &event, bool isWrite);
+	void update_translation_map(long lpn, long ppn);
 
 	bool lookup_CMT(long dlpn, Event &event);
 
@@ -819,6 +820,7 @@ protected:
 	int addressPerPage;
 	int addressSize;
 	uint totalCMTentries;
+
 
 	// Current storage
 	long currentDataPage;
@@ -858,7 +860,6 @@ private:
 	bool *trim_map;
 
 	std::queue<Block*> blockQueue;
-
 
 	Block* inuseBlock;
 	bool block_next_new();

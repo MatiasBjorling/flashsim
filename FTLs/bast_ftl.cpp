@@ -44,7 +44,7 @@ using namespace ssd;
 LogPageBlock::LogPageBlock()
 {
 	pages = new int[BLOCK_SIZE];
-	aPages = new ulong[BLOCK_SIZE];
+	aPages = new long[BLOCK_SIZE];
 
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
@@ -135,7 +135,6 @@ enum status FtlImpl_Bast::read(Event &event)
 		event.set_address(Address(0, PAGE));
 
 	manager.simulate_map_read(event);
-	manager.insert_events(event);
 
 	// Statistics
 	controller.stats.numFTLRead++;
@@ -288,8 +287,7 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long lba, Event &event)
 		// Add to empty list i.e. switch without erasing the datablock.
 		if (data_list[lba] != -1)
 		{
-			Address address = Address(data_list[lba], BLOCK);
-			manager.invalidate(address, DATA);
+			manager.invalidate(Address(data_list[lba], BLOCK), DATA);
 		}
 
 		data_list[lba] = logBlock->address.get_linear_address();
@@ -334,27 +332,24 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 		readEvent.set_address(readAddress);
 		controller.issue(readEvent);
-		event.consolidate_metaevent(readEvent);
+		//event.consolidate_metaevent(readEvent);
 
 		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
 		writeEvent.set_address(Address(newDataBlock.get_linear_address() + i, PAGE));
 		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
 		controller.issue(writeEvent);
 
-		event.consolidate_metaevent(writeEvent);
-
+		//event.consolidate_metaevent(writeEvent);
+		event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
 		// Statistics
 		controller.stats.numFTLRead++;
 		controller.stats.numFTLWrite++;
 	}
 
 	// Invalidate inactive pages (LOG and DATA)
-	manager.invalidate(logBlock->address, LOG);
+	manager.invalidate(&logBlock->address, LOG);
 	if (data_list[lba] != -1)
-	{
-		Address dBlock = Address(data_list[lba], BLOCK);
-		manager.invalidate(dBlock, DATA);
-	}
+		manager.invalidate(Address(data_list[lba], BLOCK), DATA);
 
 	// Update mapping
 	data_list[lba] = newDataBlock.get_linear_address();
