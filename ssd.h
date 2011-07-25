@@ -301,7 +301,13 @@ public:
 
 	// Constructors, maintainance, output, etc.
 	Stats(void);
+
 	void print_statistics();
+	void reset_statistics();
+	void write_statistics(FILE *stream);
+	void write_header(FILE *stream);
+private:
+	void reset();
 };
 
 /* Class to emulate a log block with page-level mapping. */
@@ -803,6 +809,8 @@ protected:
 	MPage *trans_map;
 	long *reverse_trans_map;
 
+
+
 	void select_victim_entry(FtlImpl_DftlParent::MPage &mpage);
 	void consult_GTD(long dppn, Event &event);
 	void reset_MPage(FtlImpl_DftlParent::MPage &mpage);
@@ -933,6 +941,9 @@ public:
 	void *get_result_buffer();
 	friend class Controller;
 	void print_statistics();
+	void reset_statistics();
+	void write_statistics(FILE *stream);
+	void write_header(FILE *stream);
 private:
 	enum status read(Event &event);
 	enum status write(Event &event);

@@ -346,14 +346,9 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 			//event.consolidate_metaevent(writeEvent);
 			event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
 
-			// Update GTD (A reverse map is much better. But not implemented at this moment. Maybe I do it later.
+			// Update GTD
 			long dataPpn = dataBlockAddress.get_linear_address();
 			invalidated_translation[reverse_trans_map[dataPpn]] = dataPpn;
-//			for (uint j=0;j<SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;j++)
-//			{
-//				if (trans_map[j].ppn == dataPpn)
-//					invalidated_translation[trans_map[j].vpn] = dataPpn;
-//			}
 
 			// Statistics
 			controller.stats.numGCRead++;
@@ -365,7 +360,7 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 		}
 	}
 
-	printf("GCed %u valid data pages.\n", cnt);
+	//printf("GCed %u valid data pages.\n", cnt);
 
 	/*
 	 * Perform batch update on the marked translation pages

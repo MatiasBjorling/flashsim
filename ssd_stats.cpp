@@ -31,6 +31,11 @@ using namespace ssd;
 
 Stats::Stats()
 {
+	reset();
+}
+
+void Stats::reset()
+{
 	// FTL
 	numFTLRead = 0;
 	numFTLWrite = 0;
@@ -65,6 +70,32 @@ Stats::Stats()
 
 	numMemoryRead = 0;
 	numMemoryWrite = 0;
+}
+
+void Stats::reset_statistics()
+{
+	reset();
+}
+
+void Stats::write_header(FILE *stream)
+{
+	fprintf(stream, "numFTLRead;numFTLWrite;numFTLErase;numFTLTrim;numGCRead;numGCWrite;numGCErase;numWLRead;numWLWrite;numWLErase;numLogMergeSwitch;numLogMergePartial;numLogMergeFull;numPageBlockToPageConversion;numCacheHits;numCacheFaults;numMemoryTranslation;numMemoryCache;numMemoryRead;numMemoryWrite\n");
+}
+
+void Stats::write_statistics(FILE *stream)
+{
+	fprintf(stream, "%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;\n",
+			numFTLRead, numFTLWrite, numFTLErase, numFTLTrim,
+			numGCRead, numGCWrite, numGCErase,
+			numWLRead, numWLWrite, numWLErase,
+			numLogMergeSwitch, numLogMergePartial, numLogMergeFull,
+			numPageBlockToPageConversion,
+			numCacheHits, numCacheFaults,
+			numMemoryTranslation,
+			numMemoryCache,
+			numMemoryRead,numMemoryWrite);
+
+	print_statistics();
 }
 
 void Stats::print_statistics()

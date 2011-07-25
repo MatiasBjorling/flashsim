@@ -34,15 +34,17 @@ int main(int argc, char **argv){
 	char ioPatternType; // (S)equential or (R)andom
 	char ioType; // (R)ead or (W)rite
 	double arrive_time;
+	int ioSize;
 
 	char line[80];
 
 	double read_time = 0;
 	double write_time = 0;
-	double read_total = 0;
-	double write_total = 0;
+
 	unsigned long num_reads = 0;
 	unsigned long num_writes = 0;
+
+	double afterFormatStartTime = 0;
 
 	load_config();
 	print_config(NULL);
@@ -51,9 +53,14 @@ int main(int argc, char **argv){
 
 	printf("INITIALIZING SSD\n");
 
-//	for (int i=0; i<2048576;i++)
+//	srandom(112);
+//
+//	for (int i=0; i<150000;i++)
 //	{
-//		write_time += ssd.event_arrive(WRITE, i, 1, i*500);
+//		long int wee = random()%2000000;
+//
+//		ssd.event_arrive(WRITE, wee, 1, i*1000);
+//		afterFormatStartTime += 1000;
 //	}
 
 	DIR *working_directory = NULL;
@@ -73,9 +80,22 @@ int main(int argc, char **argv){
 
 	std::sort(files.begin(), files.end());
 
+	FILE *logFile = NULL;
+	if ((logFile = fopen("output.log", "w")) == NULL)
+	{
+		printf("Output file cannot be written to.\n");
+		exit(-1);
+	}
+
+	fprintf(logFile, "File;NumIOReads;ReadIOTime;NumIOWrites;WriteIOTime;NumIOTotal;IOTime;");
+	ssd.write_header(logFile);
+
+	double timeMultiplier = 10000;
+	int deviceSize = 2000000;
+
 	long cnt=0;
 
-	double start_time = 1024288000;
+	double start_time = afterFormatStartTime;
 	for (int i=0; i<files.size();i++)
 	{
 		char *filename = NULL;
@@ -87,35 +107,86 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
+		fprintf(logFile, "%s;", files[i].c_str());
+
 		printf("-__- %s -__-\n", files[i].c_str());
 
 		start_time = start_time + arrive_time;
+
+		// Reset statistics
+		ssd.reset_statistics();
+		num_reads = 0;
+		read_time = 0;
+
+		num_writes = 0;
+		write_time = 0;
+
+		std::string fileName = files[i].c_str();
+		//DET_1_1_00_0023_P64.0_2.csv
+		int testnr = atoi(fileName.substr(4,1).c_str());
+
+		char pattern = fileName.substr(4,1).c_str()[0];
+
+		int addressDivisor = 1;
+		float multiplier = 1;
+
+		std::string multiplerStr = fileName.substr(fileName.find('P',0)+1, fileName.find_last_of('_', std::string::npos)-fileName.find('P',0)-1);
+
+		switch (pattern)
+		{
+		case '5':
+			multiplier = atof(multiplerStr.c_str());
+			break;
+
+		}
+
+
+		printf("testnr %i %i\n", testnr, ioSize);
+
 		/* first go through and write to all read addresses to prepare the SSD */
 		while(fgets(line, 80, trace) != NULL){
-			sscanf(line, "%c; %c; %li; %u; %lf, %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &arrive_time, start_time+arrive_time);
+			sscanf(line, "%c; %c; %li; %u; %i; %lf", &ioPatternType, &ioType, &vaddr, &queryTime, &ioSize, &arrive_time);
 
 			//printf("%li %c %c %li %u %lf %lf %li\n", ++cnt, ioPatternType, ioType, vaddr, queryTime, arrive_time, start_time+arrive_time);
 
+			double local_loop_time = 0;
+
 			if (ioType == 'R')
 			{
-				read_time += ssd.event_arrive(READ, vaddr, 1, start_time+arrive_time);
-				num_reads++;
+				for (int i=0;i<ioSize;i++)
+				{
+					local_loop_time += ssd.event_arrive(READ, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, (start_time+arrive_time+local_loop_time)*timeMultiplier);
+					num_reads++;
+				}
+
+				read_time += local_loop_time;
 			}
 			else if(ioType == 'W')
 			{
-				write_time += ssd.event_arrive(WRITE, vaddr, 1, start_time+arrive_time);
-				num_writes++;
+				for (int i=0;i<ioSize;i++)
+				{
+					local_loop_time += ssd.event_arrive(WRITE, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, (start_time+arrive_time+local_loop_time)*timeMultiplier);
+
+					num_writes++;
+				}
+				write_time += local_loop_time;
+
 			}
+
+			arrive_time += local_loop_time;
 		}
+
+		// Write all statistics
+		fprintf(logFile, "%lu;%f;%lu;%f;%lu;%f;", num_reads, read_time, num_writes, write_time, num_reads+num_writes, read_time+write_time);
+		ssd.write_statistics(logFile);
 
 		fclose(trace);
 	}
 
+	fclose(logFile);
+
 	closedir(working_directory);
 
-	printf("Num reads : %lu\n", num_reads);
-	printf("Num writes: %lu\n", num_writes);
-	printf("Avg read time : %.20lf\n", read_time / num_reads);
-	printf("Avg write time: %.20lf\n", write_time / num_writes);
+	printf("Finished.\n");
 	return 0;
 }

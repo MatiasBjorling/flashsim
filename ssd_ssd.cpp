@@ -310,6 +310,21 @@ void Ssd::print_statistics()
 	controller.stats.print_statistics();
 }
 
+void Ssd::reset_statistics()
+{
+	controller.stats.reset_statistics();
+}
+
+void Ssd::write_statistics(FILE *stream)
+{
+	controller.stats.write_statistics(stream);
+}
+
+void Ssd::write_header(FILE *stream)
+{
+	controller.stats.write_header(stream);
+}
+
 Block *Ssd::get_block_pointer(const Address & address)
 {
 	assert(address.valid >= PACKAGE);

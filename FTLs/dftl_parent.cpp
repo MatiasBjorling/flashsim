@@ -98,6 +98,8 @@ void FtlImpl_DftlParent::select_victim_entry(FtlImpl_DftlParent::MPage &mpage)
 		++i;
 	}
 
+	printf("done %li\n",evictPage);
+
 	mpage = trans_map[evictPage];
 }
 
@@ -108,8 +110,6 @@ void FtlImpl_DftlParent::remove_victims(FtlImpl_DftlParent::MPage &mpage)
 
 void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
 {
-	// TODO: Add translation page counter
-
 	// Simulate that we goto translation map and read the mapping page.
 	Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 	readEvent.set_address(Address(1, PAGE));

@@ -92,7 +92,6 @@ Plane::Plane(const Die &parent, uint plane_size, double reg_read_delay, double r
 	for(i = 0; i < size; i++)
 	{
 		(void) new (&data[i]) Block(*this, BLOCK_SIZE, BLOCK_ERASES, BLOCK_ERASE_DELAY,physical_address+(i*BLOCK_SIZE));
-		printf("%li\n", physical_address+(i*BLOCK_SIZE));
 	}
 
 

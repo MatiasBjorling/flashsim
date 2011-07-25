@@ -72,6 +72,7 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 		fprintf(stderr, "Block error: %s: constructor unable to allocate Page data\n", __func__);
 		exit(MEM_ERR);
 	}
+
 	for(i = 0; i < size; i++)
 		(void) new (&data[i]) Page(*this, PAGE_READ_DELAY, PAGE_WRITE_DELAY);
 
@@ -99,6 +100,8 @@ enum status Block::read(Event &event)
 enum status Block::write(Event &event)
 {
 	assert(data != NULL);
+//	if (event.get_start_time() == 1143717876.02)
+//		printf("stopp\n");
 	enum status ret = data[event.get_address().page]._write(event);
 
 	if(ret == SUCCESS && event.get_noop() == false)

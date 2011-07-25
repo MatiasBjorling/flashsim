@@ -144,6 +144,9 @@ enum status FtlImpl_Bast::read(Event &event)
 
 enum status FtlImpl_Bast::write(Event &event)
 {
+	if (event.get_start_time() == 10272258492800)
+		printf("stop");
+
 	LogPageBlock *logBlock = NULL;
 
 	long lba = (event.get_logical_address() >> addressShift);
@@ -172,7 +175,8 @@ enum status FtlImpl_Bast::write(Event &event)
 			random_merge(logBlock, lba, event);
 
 		allocate_new_logblock(logBlock, lba, event);
-
+		logBlock = log_map[lba];
+		//printf("Using new log block with address: %lu Block: %u\n", logBlock->address.get_linear_address(), logBlock->address.block);
 		// Write the current io to a new block.
 		logBlock->pages[eventAddress.page] = 0;
 		Address dataPage = logBlock->address;
@@ -259,7 +263,7 @@ void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long lba, Event
 	logBlock = new LogPageBlock();
 	logBlock->address = manager.get_free_block(LOG);
 
-	//printf("Using new log block with address: %lu Block: %u at logical address: %li\n", logBlock->address.get_linear_address(), logBlock->address.block, logicalBlockAddress);
+	//printf("Using new log block with address: %lu Block: %u\n", logBlock->address.get_linear_address(), logBlock->address.block);
 	log_map[lba] = logBlock;
 }
 
@@ -312,6 +316,7 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	 * 5. promote new block as data block
 	 * 6. put data and log block into the invalidate list.
 	 */
+
 	Address eventAddress = Address(event.get_logical_address(), PAGE);
 	Address newDataBlock = manager.get_free_block(DATA);
 
@@ -319,7 +324,7 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	{
 		// Lookup page table and see if page exist in log page
 		Address readAddress;
-		if (logBlock->pages[eventAddress.page] != -1)
+		if (logBlock->pages[eventAddress.page] != -1 && logBlock->pages[i] != -1)
 			readAddress.set_linear_address(logBlock->address.real_address + logBlock->pages[i], PAGE);
 		else if (data_list[lba] != -1)
 			readAddress.set_linear_address(data_list[lba] + i, PAGE);
