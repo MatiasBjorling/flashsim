@@ -73,14 +73,13 @@ bool LogPageBlock::operator() (const LogPageBlock& lhs, const LogPageBlock& rhs)
 FtlImpl_Bast::FtlImpl_Bast(Controller &controller):
 	FtlParent(controller)
 {
-	addressShift = 0;
-	addressSize = 0;
 
 	// Detect required number of bits for logical address size
-	for (int size = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * 4; size > 0; addressSize++) size /= 2;
+	addressSize = log(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE)/log(2);
+	addressShift = log(BLOCK_SIZE)/log(2);
 
 	// Find required number of bits for block size
-	for (int size = BLOCK_SIZE/2;size > 0; addressShift++) size /= 2;
+
 
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
 
@@ -144,9 +143,6 @@ enum status FtlImpl_Bast::read(Event &event)
 
 enum status FtlImpl_Bast::write(Event &event)
 {
-	if (event.get_start_time() == 10272258492800)
-		printf("stop");
-
 	LogPageBlock *logBlock = NULL;
 
 	long lba = (event.get_logical_address() >> addressShift);
@@ -253,11 +249,20 @@ void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long lba, Event
 {
 	if (log_map.size() >= BAST_LOG_PAGE_LIMIT)
 	{
-		long exLogicalBlock = (*log_map.begin()).first;
-		LogPageBlock *exLogBlock = (*log_map.begin()).second;
+		srandom(10);
+		int victim = random()%log_map.size()-1;
+		std::map<long, LogPageBlock*>::iterator it = log_map.begin();
+
+		for (int i=0;i<victim;i++)
+			it++;
+
+		long exLogicalBlock = (*it).first;
+		LogPageBlock *exLogBlock = (*it).second;
 
 		if (!is_sequential(exLogBlock, exLogicalBlock, event))
 			random_merge(exLogBlock, exLogicalBlock, event);
+
+		controller.stats.numPageBlockToPageConversion++;
 	}
 
 	logBlock = new LogPageBlock();
@@ -282,7 +287,11 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long lba, Event &event)
 
 	// Is block switch possible? i.e. log block switch
 	bool isSequential = true;
-	for (uint i=0;i<BLOCK_SIZE;i++) if (logBlock->pages[i] != i) { isSequential = false; break;	}
+	for (uint i=0;i<BLOCK_SIZE;i++) if (logBlock->pages[i] != i)
+	{
+		isSequential = false;
+		break;
+	}
 
 	if (isSequential)
 	{
@@ -291,7 +300,8 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long lba, Event &event)
 		// Add to empty list i.e. switch without erasing the datablock.
 		if (data_list[lba] != -1)
 		{
-			manager.invalidate(Address(data_list[lba], BLOCK), DATA);
+			Address a = Address(data_list[lba], PAGE);
+			manager.erase_and_invalidate(event, a, DATA);
 		}
 
 		data_list[lba] = logBlock->address.get_linear_address();
@@ -332,7 +342,10 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 			continue; // Empty page
 
 		if (controller.get_state(readAddress) == INVALID) // A page might be invalidated by trim
+		{
 			continue;
+		}
+
 
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 		readEvent.set_address(readAddress);
@@ -352,9 +365,14 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	}
 
 	// Invalidate inactive pages (LOG and DATA)
-	manager.invalidate(&logBlock->address, LOG);
+
+	manager.erase_and_invalidate(event, logBlock->address, LOG);
 	if (data_list[lba] != -1)
-		manager.invalidate(Address(data_list[lba], BLOCK), DATA);
+	{
+		Address a = Address(data_list[lba], PAGE);
+		manager.erase_and_invalidate(event, a, DATA);
+	}
+
 
 	// Update mapping
 	data_list[lba] = newDataBlock.get_linear_address();

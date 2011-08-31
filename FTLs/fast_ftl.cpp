@@ -34,14 +34,8 @@ using namespace ssd;
 FtlImpl_Fast::FtlImpl_Fast(Controller &controller):
 	FtlParent(controller)
 {
-	addressShift = 0;
-	addressSize = 0;
-
-	// Detect required number of bits for logical address size
-	for (int size = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * 4; size > 0; addressSize++) size /= 2;
-
-	// Find required number of bits for block size
-	for (int size = BLOCK_SIZE/2;size > 0; addressShift++) size /= 2;
+	addressSize = log(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE)/log(2);
+	addressShift = log(BLOCK_SIZE)/log(2);
 
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
 

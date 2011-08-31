@@ -36,18 +36,26 @@
 #include <vector>
 #include <queue>
 #include <iostream>
+#include <limits>
 #include "../ssd.h"
 
 using namespace ssd;
 
-FtlImpl_DftlParent::MPage::MPage()
+FtlImpl_DftlParent::MPage::MPage(long vpn)
 {
-	this->vpn = -1;
+	this->vpn = vpn;
 	this->ppn = -1;
 	this->create_ts = -1;
 	this->modified_ts = -1;
 }
 
+double FtlImpl_DftlParent::mpage_modified_ts_compare(const FtlImpl_DftlParent::MPage& mpage)
+{
+	if (mpage.modified_ts == -1 || !mpage.cached)
+		return std::numeric_limits<double>::max();
+
+	return mpage.modified_ts;
+}
 
 FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	FtlParent(controller)
@@ -71,41 +79,13 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	// Initialise block mapping table.
 	uint ssdSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
 
-	trans_map = new MPage[ssdSize];
-
+	//trans_map = new MPage[ssdSize];
 	for (uint i=0;i<ssdSize;i++)
-		trans_map[i].vpn = i;
-
-	reverse_trans_map = new long[ssdSize];
-
-	return;
-}
-
-
-void FtlImpl_DftlParent::select_victim_entry(FtlImpl_DftlParent::MPage &mpage)
-{
-	double evictPageTime = trans_map[cmt.begin()->first].modified_ts;
-	long evictPage = cmt.begin()->first;
-
-	// Retrieves the LRU CMT object
-	std::map<long, bool>::iterator i = cmt.begin();
-	while (i != cmt.end())
 	{
-		mpage = trans_map[i->first];
-		if (mpage.ppn != -1 && evictPageTime >= mpage.modified_ts)
-			evictPage = i->first;
-
-		++i;
+		trans_map.insert(MPage(i));
 	}
 
-	printf("done %li\n",evictPage);
-
-	mpage = trans_map[evictPage];
-}
-
-void FtlImpl_DftlParent::remove_victims(FtlImpl_DftlParent::MPage &mpage)
-{
-
+	reverse_trans_map = new long[ssdSize];
 }
 
 void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
@@ -115,7 +95,7 @@ void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
 	readEvent.set_address(Address(1, PAGE));
 	readEvent.set_noop(true);
 
-	controller.issue(readEvent);
+	if (controller.issue(readEvent) == FAILURE) { assert(false);}
 	//event.consolidate_metaevent(readEvent);
 	event.incr_time_taken(readEvent.get_time_taken());
 	controller.stats.numFTLRead++;
@@ -160,7 +140,6 @@ long FtlImpl_DftlParent::get_free_data_page()
 
 FtlImpl_DftlParent::~FtlImpl_DftlParent(void)
 {
-	delete[] trans_map;
 	delete[] reverse_trans_map;
 }
 
@@ -179,27 +158,34 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 
 		if (isWrite)
 		{
-			trans_map[dlpn].modified_ts = event.get_start_time();
+			MpageByID::iterator it = trans_map.find(dlpn);
+			MPage current = *it;
+			current.modified_ts = event.get_start_time();
+			trans_map.replace(it, current);
 
 			// Inform the ssd model that it should invalidate the previous page.
-			Address killAddress = Address(trans_map[dlpn].ppn, PAGE);
+			Address killAddress = Address(current.ppn, PAGE);
 			event.set_replace_address(killAddress);
 		}
 	} else {
 		controller.stats.numCacheFaults++;
 		consult_GTD(dlpn, event);
 
-		if (isWrite)
-		{
-			trans_map[dlpn].create_ts = event.get_start_time();
-			trans_map[dlpn].modified_ts = event.get_start_time();
-		}
+		MpageByID::iterator it = trans_map.find(dlpn);
+		MPage current = *it;
+		current.modified_ts = event.get_start_time();
+		current.create_ts = event.get_start_time();
+		current.cached = true;
+
+		cmt[dlpn] = true;
 
 		if (cmt.size() == totalCMTentries)
 		{
 			// Find page to evict
-			MPage evictPage;
-			select_victim_entry(evictPage);
+			MpageByModified::iterator evictit = boost::multi_index::get<1>(trans_map).begin();
+			MPage evictPage = *++evictit;
+			//printf("Im here3: %li %li %f %f\n", evictPage.vpn, evictPage.ppn, evictPage.create_ts, evictPage.modified_ts);
+			MpageByID::iterator it = trans_map.find(evictPage.vpn);
 
 			if (evictPage.create_ts != evictPage.modified_ts)
 			{
@@ -209,29 +195,40 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 				int vpnBase = evictPage.vpn - evictPage.vpn % addressPerPage;
 
 				for (int i=vpnBase;i<vpnBase+addressPerPage;i++)
-						trans_map[i].create_ts = trans_map[i].modified_ts;
+				{
+					MpageByID::iterator cit = trans_map.find(i);
+					MPage cur = *cit;
+					cur.create_ts = cur.modified_ts;
+					trans_map.replace(cit, cur);
+				}
+
 
 				// Simulate the write to translate page
 				Event write_event = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
 				write_event.set_address(Address(0, PAGE));
 				write_event.set_noop(true);
 
-				controller.issue(write_event);
+				if (controller.issue(write_event) == FAILURE) {	assert(false);}
+
 				event.incr_time_taken(write_event.get_time_taken());
 				//event.consolidate_metaevent(write_event);
 			}
 
 			// Remove page from cache.
-			reset_MPage(evictPage);
 			cmt.erase(evictPage.vpn);
+			evictPage.cached = false;
+
+			reset_MPage(evictPage);
+			trans_map.replace(it, evictPage);
 		}
 
-		cmt[dlpn] = true;
+
+		trans_map.replace(it, current);
 	}
 }
 
-void FtlImpl_DftlParent::update_translation_map(long lpn, long ppn)
+void FtlImpl_DftlParent::update_translation_map(FtlImpl_DftlParent::MPage &mpage, long ppn)
 {
-	trans_map[lpn].ppn = ppn;
-	reverse_trans_map[ppn] = lpn;
+	mpage.ppn = ppn;
+	reverse_trans_map[ppn] = mpage.vpn;
 }

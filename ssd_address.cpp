@@ -69,6 +69,7 @@ Address::Address(uint package, uint die, uint plane, uint block, uint page, enum
 Address::Address(uint address, enum address_valid valid):
 	valid(valid)
 {
+	assert(address >= 0);
 	set_linear_address(address);
 }
 

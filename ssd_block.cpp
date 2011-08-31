@@ -137,10 +137,7 @@ enum status Block::_erase(Event &event)
 		}
 
 		for(i = 0; i < size; i++)
-		{
 			data[i].set_state(EMPTY);
-		}
-
 		event.incr_time_taken(erase_delay);
 		last_erase_time = event.get_start_time() + event.get_time_taken();
 		erases_remaining--;

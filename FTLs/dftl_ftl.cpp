@@ -60,14 +60,14 @@ enum status FtlImpl_Dftl::read(Event &event)
 	uint dlpn = event.get_logical_address();
 
 	resolve_mapping(event, false);
-
-	if (trans_map[dlpn].ppn == -1)
+	MpageByID::iterator it = trans_map.find(dlpn);
+	if ((*it).ppn == -1)
 	{
 		event.set_address(Address(0, PAGE));
 		event.set_noop(true);
 	}
 	else
-		event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+		event.set_address(Address((*it).ppn, PAGE));
 
 
 	controller.stats.numFTLRead++;
@@ -84,10 +84,16 @@ enum status FtlImpl_Dftl::write(Event &event)
 	resolve_mapping(event, true);
 
 	// Get next available data page
-	long replace_page = trans_map[dlpn].ppn;
-	update_translation_map(dlpn, get_free_data_page()); //trans_map[dlpn].ppn = get_free_data_page();
 
-	event.set_address(Address(trans_map[dlpn].ppn, PAGE));
+	MpageByID::iterator it = trans_map.find(dlpn);
+	MPage current = *it;
+
+	long replace_page = current.ppn;
+	update_translation_map(current, get_free_data_page()); //trans_map[dlpn].ppn = get_free_data_page();
+
+	event.set_address(Address(current.ppn, PAGE));
+
+	trans_map.replace(it, current);
 
 	if (replace_page != -1)
 		event.set_replace_address(Address(replace_page, PAGE));
@@ -108,15 +114,19 @@ enum status FtlImpl_Dftl::trim(Event &event)
 
 	event.set_address(Address(0, PAGE));
 
-	if (trans_map[dlpn].ppn != -1)
+	MpageByID::iterator it = trans_map.find(dlpn);
+	MPage current = *it;
+
+	if (current.ppn != -1)
 	{
-		Address address = Address(trans_map[dlpn].ppn, PAGE);
+		Address address = Address(current.ppn, PAGE);
 		Block *block = controller.get_block_pointer(address);
 		block->invalidate_page(address.page);
-		update_translation_map(dlpn, -1);
-		//trans_map[dlpn].ppn = -1;
-		trans_map[dlpn].modified_ts = -1;
-		trans_map[dlpn].modified_ts = -1;
+
+		update_translation_map(current, -1);
+		current.modified_ts = -1;
+		current.create_ts = -1;
+		trans_map.replace(it, current);
 	}
 
 	controller.stats.numFTLTrim++;
@@ -140,6 +150,7 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 	{
 		// When valid, two events are create, one for read and one for write. They are chained and the controller are
 		// called to execute them. The execution time is then added to the real event.
+
 		if (block->get_state(i) == VALID)
 		{
 			// Set up events.
@@ -175,12 +186,16 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 			invalidated_translation[reverse_trans_map[dataPpn]] = dataPpn;
 
 			// Statistics
+			controller.stats.numFTLRead++;
+			controller.stats.numFTLWrite++;
 			controller.stats.numGCRead++;
 			controller.stats.numGCWrite++;
 			controller.stats.numMemoryRead++; // Block->get_state(i) == VALID
 			controller.stats.numMemoryWrite =+ 3; // GTD Update (2) + translation invalidate (1)
 
 			cnt++;
+		} else {
+			block->invalidate_page(i);
 		}
 	}
 
@@ -200,36 +215,40 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 		long vpn = (*i).second;
 
 		// Update translation map ( it also updates the CMT, as it is stored inside the GDT )
-		update_translation_map(vpn, ppn);
-		//trans_map[vpn].ppn = ppn;
-		trans_map[vpn].modified_ts = event.get_start_time();
+		MpageByID::iterator it = trans_map.find(vpn);
+		MPage current = *it;
+		update_translation_map(current, ppn);
+		current.modified_ts = event.get_start_time();
+		trans_map.replace(it, current);
 
 		dirtied_translation_pages[vpn/addressPerPage] = true;
 	}
 
-	for (std::map<long, bool>::const_iterator i = dirtied_translation_pages.begin(); i!=dirtied_translation_pages.end(); ++i)
-	{
-		// Set up events.
-		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
-		readEvent.set_address(Address(0, PAGE));
-		readEvent.set_noop(true);
-
-		if (controller.issue(readEvent) == FAILURE)
-			printf("Translation simulation block copy failed.");
-
-		//event.consolidate_metaevent(readEvent);
-
-		// Simulate the write.
-		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
-		writeEvent.set_address(Address(0, PAGE));
-		writeEvent.set_noop(true);
-
-		// Execute
-		if (controller.issue(writeEvent) == FAILURE)
-			printf("Translation simulation block copy failed.");
-
-		//event.consolidate_metaevent(writeEvent);
-
-		event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
-	}
+//	for (std::map<long, bool>::const_iterator i = dirtied_translation_pages.begin(); i!=dirtied_translation_pages.end(); ++i)
+//	{
+//		// Set up events.
+//		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
+//		readEvent.set_address(Address(0, PAGE));
+//		readEvent.set_noop(true);
+//
+//		if (controller.issue(readEvent) == FAILURE)
+//			printf("Translation simulation block copy failed.");
+//
+//		//event.consolidate_metaevent(readEvent);
+//
+//		// Simulate the write.
+//		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
+//		writeEvent.set_address(Address(0, PAGE));
+//		writeEvent.set_noop(true);
+//
+//		// Execute
+//		if (controller.issue(writeEvent) == FAILURE)
+//			printf("Translation simulation block copy failed.");
+//
+//		//event.consolidate_metaevent(writeEvent);
+//
+//		event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
+//		controller.stats.numFTLRead++;
+//		controller.stats.numFTLWrite++;
+//	}
 }

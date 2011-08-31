@@ -130,7 +130,7 @@ void Block_manager::invalidate(Address address, block_type type)
 	}
 }
 
-bool Block_manager::block_comparitor (Block const *x,Block const *y) {
+bool Block_manager::block_comparitor_simple (Block const *x,Block const *y) {
 	// We assumme we have to read all pages to write out valid pages. (therefore 1+u) else (1-u)
 	// cost/benefit = (age * (1+u)) / 2u
 
@@ -149,6 +149,7 @@ bool Block_manager::block_comparitor (Block const *x,Block const *y) {
 	return bc1 < bc2;
 }
 
+
 /*
  * Insert erase events into the event stream.
  * The strategy is to clean up all invalid pages instantly.
@@ -162,8 +163,8 @@ void Block_manager::insert_events(Event &event)
 	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
 	{
 		used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
-		//if (active_list.size() % 10 == 0)
-			//printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+
+		//printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 	} else {
 		//printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 		used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
@@ -181,7 +182,7 @@ void Block_manager::insert_events(Event &event)
 	{
 		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
 		erase_event.set_address(Address(invalid_list.back()->get_physical_address(), BLOCK));
-		ftl.controller.issue(erase_event);
+		if (ftl.controller.issue(erase_event) == FAILURE) {	assert(false);}
 		event.incr_time_taken(erase_event.get_time_taken());
 		//event.consolidate_metaevent(erase_event);
 
@@ -200,27 +201,32 @@ void Block_manager::insert_events(Event &event)
 	{
 		// Then go though the active blocks via the priority queue of active pages.
 		// We limit it to page-mapping algorithms.
-		if (num_insert_events % (BLOCK_SIZE*100) == 0)
-			std::sort(active_list.begin(), active_list.end(), &block_comparitor); // Do a full sort
-		else if (active_list.size() > num_to_erase*2)
-			std::sort(active_list.begin(), active_list.begin()+num_to_erase*2, &block_comparitor); // Only sort the beginning of the list.
 
+		std::sort(active_list.begin(), active_list.end(), &block_comparitor_simple); // Do a full sort
+
+		printf("---------------------------- %i %i\n", active_list.front()->get_pages_invalid(), active_list.back()->get_pages_invalid());
+//		else if (active_list.size() > num_to_erase*2)
+//			std::sort(active_list.begin(), active_list.begin()+num_to_erase*200, &block_comparitor); // Only sort the beginning of the list.
+
+		//	printf("begin----------------\n");
 		while (num_to_erase != 0 && active_list.size() > 1)
 		{
 			Block *blockErase = active_list.front();
+			num_to_erase--;
+
+			//printf("status: %i %i \n", blockErase->get_pages_valid(), blockErase->get_pages_invalid());
 
 			// If there is no gain, then don't move the pages.
 			if (blockErase->get_pages_invalid() == 0)
-			{
-				num_to_erase--;
 				continue;
-			}
-
 
 			if (blockErase->get_physical_address() == event.get_address().get_linear_address() - event.get_address().get_linear_address() % BLOCK_SIZE)
 			{
 				blockErase = active_list[1];
-				active_list.erase(active_list.begin()+1);
+				std::vector<Block*>::iterator it = active_list.begin();
+				it++;
+
+				active_list.erase(it);
 			} else
 				active_list.erase(active_list.begin());
 
@@ -234,12 +240,10 @@ void Block_manager::insert_events(Event &event)
 			free_list.push_back(blockErase);
 
 			// Execute erase
-			ftl.controller.issue(erase_event);
+			if (ftl.controller.issue(erase_event) == FAILURE) {	assert(false);	}
 
 			event.incr_time_taken(erase_event.get_time_taken());
-			//event.consolidate_metaevent(erase_event);
 
-			num_to_erase--;
 			ftl.controller.stats.numFTLErase++;
 		}
 	}
@@ -291,7 +295,7 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 
 	erase_event.set_address(address);
 
-	ftl.controller.issue(erase_event);
+	if (ftl.controller.issue(erase_event) == FAILURE) {	assert(false);}
 	//event.consolidate_metaevent(erase_event);
 	event.incr_time_taken(erase_event.get_time_taken());
 	ftl.controller.stats.numFTLErase++;

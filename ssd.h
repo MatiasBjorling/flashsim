@@ -30,6 +30,11 @@
 #include <vector>
 #include <queue>
 #include <map>
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/identity.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/global_fun.hpp>
  
 #ifndef _SSD_H
 #define _SSD_H
@@ -192,6 +197,9 @@ enum block_type {LOG, DATA, LOG_SEQ};
  */
 enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL};
 
+
+
+
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
  *
@@ -217,6 +225,12 @@ class FtlParent;
 class FtlImpl_Page;
 class FtlImpl_Bast;
 class FtlImpl_Fast;
+class FtlImpl_DftlParent;
+
+class FtlImpl_Dftl;
+class FtlImpl_BDftl;
+
+
 
 class Ram;
 class Controller;
@@ -487,6 +501,7 @@ public:
 	Block *get_pointer(void);
 	block_type get_block_type(void) const;
 	void set_block_type(block_type value);
+	long physical_address;
 private:
 	uint size;
 	Page * const data;
@@ -498,7 +513,7 @@ private:
 	double last_erase_time;
 	double erase_delay;
 	double modification_time;
-	long physical_address;
+
 	block_type btype;
 };
 
@@ -654,7 +669,7 @@ public:
 	int get_num_free_blocks();
 private:
 	void get_page_block(Address &address);
-	static bool block_comparitor (Block const *x,Block const *y);
+	static bool block_comparitor_simple (Block const *x,Block const *y);
 
 	FtlParent &ftl;
 
@@ -787,6 +802,8 @@ private:
 	int addressSize;
 };
 
+
+
 class FtlImpl_DftlParent : public FtlParent
 {
 public:
@@ -801,23 +818,38 @@ protected:
 		long ppn;
 		double create_ts;
 		double modified_ts;
+		bool cached;
 
-		MPage();
+		MPage(long vpn);
 	};
 
 	std::map<long, bool> cmt;
-	MPage *trans_map;
+
+	static double mpage_modified_ts_compare(const MPage& mpage);
+
+	typedef boost::multi_index_container<
+		FtlImpl_DftlParent::MPage,
+			boost::multi_index::indexed_by<
+		    // sort by MPage::operator<
+		  	  boost::multi_index::ordered_unique<boost::multi_index::member<FtlImpl_DftlParent::MPage,long int,&FtlImpl_DftlParent::MPage::vpn> >,
+
+		  	  // Sort by modified ts
+		  	  boost::multi_index::ordered_non_unique<boost::multi_index::global_fun<const FtlImpl_DftlParent::MPage&,double,&FtlImpl_DftlParent::mpage_modified_ts_compare> >
+		  >
+		> trans_set;
+
+	typedef trans_set::nth_index<0>::type MpageByID;
+	typedef trans_set::nth_index<1>::type MpageByModified;
+
+	trans_set trans_map;
+	//MPage *trans_map;
 	long *reverse_trans_map;
 
-
-
-	void select_victim_entry(FtlImpl_DftlParent::MPage &mpage);
 	void consult_GTD(long dppn, Event &event);
 	void reset_MPage(FtlImpl_DftlParent::MPage &mpage);
-	void remove_victims(FtlImpl_DftlParent::MPage &mpage);
 
 	void resolve_mapping(Event &event, bool isWrite);
-	void update_translation_map(long lpn, long ppn);
+	void update_translation_map(FtlImpl_DftlParent::MPage &mpage, long ppn);
 
 	bool lookup_CMT(long dlpn, Event &event);
 

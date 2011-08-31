@@ -38,12 +38,6 @@ int main(int argc, char **argv){
 
 	char line[80];
 
-	double read_time = 0;
-	double write_time = 0;
-
-	unsigned long num_reads = 0;
-	unsigned long num_writes = 0;
-
 	double afterFormatStartTime = 0;
 
 	load_config();
@@ -53,15 +47,14 @@ int main(int argc, char **argv){
 
 	printf("INITIALIZING SSD\n");
 
-//	srandom(112);
-//
-//	for (int i=0; i<150000;i++)
-//	{
-//		long int wee = random()%2000000;
-//
-//		ssd.event_arrive(WRITE, wee, 1, i*1000);
-//		afterFormatStartTime += 1000;
-//	}
+	srandom(1);
+
+	for (int i=0; i<1800000;i++)
+	{
+		//
+		ssd.event_arrive(WRITE, i, 1, i*1000);
+		afterFormatStartTime += 1000;
+	}
 
 	DIR *working_directory = NULL;
 	if ((working_directory = opendir(argv[1])) == NULL)
@@ -93,8 +86,13 @@ int main(int argc, char **argv){
 	double timeMultiplier = 10000;
 	int deviceSize = 2000000;
 
-	long cnt=0;
+	double read_time = 0;
+	double write_time = 0;
 
+	unsigned long num_reads = 0;
+	unsigned long num_writes = 0;
+
+	long cnt=0;
 	double start_time = afterFormatStartTime;
 	for (int i=0; i<files.size();i++)
 	{
@@ -115,23 +113,20 @@ int main(int argc, char **argv){
 
 		// Reset statistics
 		ssd.reset_statistics();
+
 		num_reads = 0;
 		read_time = 0;
 
 		num_writes = 0;
 		write_time = 0;
 
-		std::string fileName = files[i].c_str();
-		//DET_1_1_00_0023_P64.0_2.csv
-		int testnr = atoi(fileName.substr(4,1).c_str());
-
-		char pattern = fileName.substr(4,1).c_str()[0];
-
 		int addressDivisor = 1;
 		float multiplier = 1;
 
+		std::string fileName = files[i].c_str();
 		std::string multiplerStr = fileName.substr(fileName.find('P',0)+1, fileName.find_last_of('_', std::string::npos)-fileName.find('P',0)-1);
 
+		char pattern = fileName.substr(4,1).c_str()[0];
 		switch (pattern)
 		{
 		case '5':
@@ -139,9 +134,6 @@ int main(int argc, char **argv){
 			break;
 
 		}
-
-
-		printf("testnr %i %i\n", testnr, ioSize);
 
 		/* first go through and write to all read addresses to prepare the SSD */
 		while(fgets(line, 80, trace) != NULL){
@@ -155,7 +147,7 @@ int main(int argc, char **argv){
 			{
 				for (int i=0;i<ioSize;i++)
 				{
-					local_loop_time += ssd.event_arrive(READ, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, (start_time+arrive_time+local_loop_time)*timeMultiplier);
+					local_loop_time += ssd.event_arrive(READ, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, ((start_time+arrive_time)*timeMultiplier)+local_loop_time);
 					num_reads++;
 				}
 
@@ -165,7 +157,7 @@ int main(int argc, char **argv){
 			{
 				for (int i=0;i<ioSize;i++)
 				{
-					local_loop_time += ssd.event_arrive(WRITE, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, (start_time+arrive_time+local_loop_time)*timeMultiplier);
+					local_loop_time += ssd.event_arrive(WRITE, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, ((start_time+arrive_time)*timeMultiplier)+local_loop_time);
 
 					num_writes++;
 				}
@@ -181,6 +173,8 @@ int main(int argc, char **argv){
 		ssd.write_statistics(logFile);
 
 		fclose(trace);
+
+
 	}
 
 	fclose(logFile);
