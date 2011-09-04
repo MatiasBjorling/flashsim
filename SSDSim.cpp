@@ -6,7 +6,6 @@
  */
 
 #include "SSDSim.h"
-#include "ssd.h"
 #include <stdio.h>
 
 #ifdef __cplusplus

@@ -25,10 +25,12 @@
 
 using namespace ssd;
 
+// Initialization of the block layer.
+Block_manager *Block_manager::inst = NULL;
 
-FtlParent::FtlParent(Controller &controller) : controller(controller), manager(*this)
+FtlParent::FtlParent(Controller &controller) : controller(controller)
 {
-	return;
+	Block_manager::instance_initialize(this);
 }
 
 
@@ -60,6 +62,6 @@ Block *FtlParent::get_block_pointer(const Address &address)
 
 void FtlParent::cleanup_block(Event &event, Block *block)
 {
-	fprintf(stderr, "Please implement interface");
+	assert(false);
 	return;
 }

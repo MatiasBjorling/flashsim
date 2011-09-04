@@ -41,7 +41,6 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 	pages_invalid(0),
 	state(FREE),
 	modification_time(-1),
-
 	/* set erases remaining to BLOCK_ERASES to match Block constructor args 
 	 * in Plane class
 	 * this is the cheap implementation but can change to pass through classes */
@@ -76,6 +75,10 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 	for(i = 0; i < size; i++)
 		(void) new (&data[i]) Page(*this, PAGE_READ_DELAY, PAGE_WRITE_DELAY);
 
+	// Creates the active cost structure in the block manager.
+	// It assumes that it is created lineary.
+	Block_manager::instance()->cost_insert(this);
+
 	return;
 }
 
@@ -100,15 +103,15 @@ enum status Block::read(Event &event)
 enum status Block::write(Event &event)
 {
 	assert(data != NULL);
-//	if (event.get_start_time() == 1143717876.02)
-//		printf("stopp\n");
 	enum status ret = data[event.get_address().page]._write(event);
 
-	if(ret == SUCCESS && event.get_noop() == false)
+	if(event.get_noop() == false)
 	{
 		pages_valid++;
 		state = ACTIVE;
 		modification_time = event.get_start_time();
+
+		Block_manager::instance()->update_block(this);
 	}
 	return ret;
 }
@@ -137,13 +140,20 @@ enum status Block::_erase(Event &event)
 		}
 
 		for(i = 0; i < size; i++)
+		{
+			//assert(data[i].get_state() == INVALID);
 			data[i].set_state(EMPTY);
+		}
+
+
 		event.incr_time_taken(erase_delay);
 		last_erase_time = event.get_start_time() + event.get_time_taken();
 		erases_remaining--;
 		pages_valid = 0;
 		pages_invalid = 0;
 		state = FREE;
+
+		Block_manager::instance()->update_block(this);
 	}
 
 	event.incr_time_taken(erase_delay);
@@ -203,11 +213,16 @@ void Block::invalidate_page(uint page)
 {
 	assert(page < size);
 
-	if (data[page].get_state() == INVALID)
+	if (data[page].get_state() == INVALID )
 		return;
 
+	assert(data[page].get_state() == VALID);
+
 	data[page].set_state(INVALID);
+
 	pages_invalid++;
+
+	Block_manager::instance()->update_block(this);
 
 	/* update block state */
 	if(pages_invalid >= size)

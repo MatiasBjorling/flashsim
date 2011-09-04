@@ -116,7 +116,7 @@ enum status Package::merge(Event &event)
 	return data[event.get_address().die].merge(event);
 }
 
-const Ssd &Package::get_parent(void)
+const Ssd &Package::get_parent(void) const
 {
 	return parent;
 }

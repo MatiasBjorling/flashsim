@@ -48,12 +48,28 @@ int main(int argc, char **argv){
 	printf("INITIALIZING SSD\n");
 
 	srandom(1);
+	int preIO = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
 
-	for (int i=0; i<1800000;i++)
+	if (FTL_IMPLEMENTATION == 0) // PAGE
+		preIO -= 16*BLOCK_SIZE;
+
+	if (FTL_IMPLEMENTATION == 1) // BAST
+		preIO -= (BAST_LOG_PAGE_LIMIT*BLOCK_SIZE)*1.3;
+
+	if (FTL_IMPLEMENTATION == 2) // FAST
+		preIO -= (FAST_LOG_PAGE_LIMIT*BLOCK_SIZE)*1.1;
+
+	if (FTL_IMPLEMENTATION > 2) // DFTL BIFTL
+		preIO -= 1000;
+	printf("Writes %i pages for startup out of %i total pages.\n", preIO, SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE);
+
+	for (int i=0; i<preIO;i++)
 	{
-		//
-		ssd.event_arrive(WRITE, i, 1, i*1000);
+		double d = ssd.event_arrive(WRITE, i, 1, i*1000);
 		afterFormatStartTime += 1000;
+
+		if (i % 1000 == 0)
+			printf("Wrote %i %f\n", i,d );
 	}
 
 	DIR *working_directory = NULL;

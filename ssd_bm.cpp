@@ -18,7 +18,7 @@
 using namespace ssd;
 
 
-Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
+Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 {
 	/*
 	 * Configuration of blocks.
@@ -34,7 +34,6 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 
 	// Block-based map lookup simulation
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
-	//map_space_capacity = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE / (SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE * 32 / 8 / PAGE_SIZE);
 
 	directoryCurrentPage = 0;
 	simpleCurrentFree = 0;
@@ -42,6 +41,12 @@ Block_manager::Block_manager(FtlParent &ftl) : ftl(ftl)
 
 	data_active = 0;
 	log_active = 0;
+
+	current_writing_block = -2;
+
+	out_of_blocks = false;
+
+	active_cost.reserve(SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
 }
 
 Block_manager::~Block_manager(void)
@@ -49,30 +54,53 @@ Block_manager::~Block_manager(void)
 	return;
 }
 
+void Block_manager::cost_insert(Block *b)
+{
+	active_cost.push_back(b);
+}
+
+void Block_manager::instance_initialize(FtlParent *ftl)
+{
+	Block_manager::inst = new Block_manager(ftl);
+}
+
+Block_manager *Block_manager::instance()
+{
+	return Block_manager::inst;
+}
+
 /*
  * Retrieves a page using either simple approach (when not all
  * pages have been written or the complex that retrieves
  * it from a free page list.
  */
-void Block_manager::get_page_block(Address &address)
+void Block_manager::get_page_block(Address &address, Event &event)
 {
 	if (simpleCurrentFree < max_blocks*BLOCK_SIZE)
 	{
 		address.set_linear_address(simpleCurrentFree, BLOCK);
+		current_writing_block = simpleCurrentFree;
 		simpleCurrentFree += BLOCK_SIZE;
 	}
 	else
 	{
+		if (free_list.size() <= 1 && !out_of_blocks)
+		{
+			out_of_blocks = true;
+			insert_events(event);
+		}
 		assert(free_list.size() != 0);
 		address.set_linear_address(free_list.front()->get_physical_address(), BLOCK);
+		current_writing_block = free_list.front()->get_physical_address();
 		free_list.erase(free_list.begin());
+		out_of_blocks = false;
 	}
 }
 
 
-Address Block_manager::get_free_block()
+Address Block_manager::get_free_block(Event &event)
 {
-	return get_free_block(DATA);
+	return get_free_block(DATA, event);
 }
 
 /*
@@ -115,7 +143,7 @@ void Block_manager::print_statistics()
 
 void Block_manager::invalidate(Address address, block_type type)
 {
-	invalid_list.push_back(ftl.get_block_pointer(address));
+	invalid_list.push_back(ftl->get_block_pointer(address));
 
 	switch (type)
 	{
@@ -130,45 +158,14 @@ void Block_manager::invalidate(Address address, block_type type)
 	}
 }
 
-bool Block_manager::block_comparitor_simple (Block const *x,Block const *y) {
-	// We assumme we have to read all pages to write out valid pages. (therefore 1+u) else (1-u)
-	// cost/benefit = (age * (1+u)) / 2u
-
-	if (x->get_modification_time() == -1)
-		return false;
-
-	if (y->get_modification_time() == -1)
-		return true;
-
-	float ratio1 = (BLOCK_SIZE - (x->get_pages_valid() - x->get_pages_invalid())) / BLOCK_SIZE;
-	float ratio2 = (BLOCK_SIZE - (y->get_pages_valid() - y->get_pages_invalid())) / BLOCK_SIZE;
-
-	double bc1 = ( 1+ratio1) / (1+(2*ratio1));
-	double bc2 = ( 1+ratio2) / (1+(2*ratio2));
-
-	return bc1 < bc2;
-}
-
-
 /*
  * Insert erase events into the event stream.
  * The strategy is to clean up all invalid pages instantly.
  */
 void Block_manager::insert_events(Event &event)
 {
-	//print_statistics();
-
 	// Calculate if GC should be activated.
-	float used;
-	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
-	{
-		used = (int)invalid_list.size() + (int)active_list.size() - (int)free_list.size();
-
-		//printf("Invalid: %i Active: %i Free: %i Total: %i\n", (int)invalid_list.size(), (int)active_list.size(), (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
-	} else {
-		//printf("Invalid: %i Log: %i Data: %i Free: %i Total: %i\n", (int)invalid_list.size(), log_active, data_active, (int)free_list.size(), SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
-		used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
-	}
+	float used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
 	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
 	float ratio = used/total;
 
@@ -182,123 +179,113 @@ void Block_manager::insert_events(Event &event)
 	{
 		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
 		erase_event.set_address(Address(invalid_list.back()->get_physical_address(), BLOCK));
-		if (ftl.controller.issue(erase_event) == FAILURE) {	assert(false);}
+		if (ftl->controller.issue(erase_event) == FAILURE) {	assert(false);}
 		event.incr_time_taken(erase_event.get_time_taken());
-		//event.consolidate_metaevent(erase_event);
 
 		free_list.push_back(invalid_list.back());
 		invalid_list.pop_back();
 
-		//printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
 		num_to_erase--;
-		ftl.controller.stats.numFTLErase++;
+		ftl->controller.stats.numFTLErase++;
 	}
 
 	num_insert_events++;
 
-
 	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
 	{
-		// Then go though the active blocks via the priority queue of active pages.
-		// We limit it to page-mapping algorithms.
 
-		std::sort(active_list.begin(), active_list.end(), &block_comparitor_simple); // Do a full sort
-
-		printf("---------------------------- %i %i\n", active_list.front()->get_pages_invalid(), active_list.back()->get_pages_invalid());
-//		else if (active_list.size() > num_to_erase*2)
-//			std::sort(active_list.begin(), active_list.begin()+num_to_erase*200, &block_comparitor); // Only sort the beginning of the list.
-
-		//	printf("begin----------------\n");
-		while (num_to_erase != 0 && active_list.size() > 1)
+		ActiveByCost::iterator it = active_cost.get<1>().end();
+		--it;
+		while (num_to_erase != 0 && (*it)->get_pages_invalid() > 0 && (*it)->get_pages_valid() == BLOCK_SIZE)
 		{
-			Block *blockErase = active_list.front();
-			num_to_erase--;
-
-			//printf("status: %i %i \n", blockErase->get_pages_valid(), blockErase->get_pages_invalid());
-
-			// If there is no gain, then don't move the pages.
-			if (blockErase->get_pages_invalid() == 0)
-				continue;
-
-			if (blockErase->get_physical_address() == event.get_address().get_linear_address() - event.get_address().get_linear_address() % BLOCK_SIZE)
+			if (current_writing_block != (*it)->physical_address)
 			{
-				blockErase = active_list[1];
-				std::vector<Block*>::iterator it = active_list.begin();
-				it++;
+				//printf("erase p: %p phy: %li ratio: %i num: %i\n", (*it), (*it)->physical_address, (*it)->get_pages_invalid(), num_to_erase);
+				Block *blockErase = (*it);
 
-				active_list.erase(it);
-			} else
-				active_list.erase(active_list.begin());
+				// Let the FTL handle cleanup of the block.
+				ftl->cleanup_block(event, blockErase);
 
-			// Let the FTL handle cleanup of the block.
-			ftl.cleanup_block(event, blockErase);
+				// Create erase event and attach to current event queue.
+				Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
+				erase_event.set_address(Address(blockErase->get_physical_address(), BLOCK));
 
-			// Create erase event and attach to current event queue.
-			Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
-			erase_event.set_address(Address(blockErase->get_physical_address(), BLOCK));
+				// Execute erase
+				if (ftl->controller.issue(erase_event) == FAILURE) { assert(false);	}
 
-			free_list.push_back(blockErase);
+				free_list.push_back(blockErase);
 
-			// Execute erase
-			if (ftl.controller.issue(erase_event) == FAILURE) {	assert(false);	}
+				event.incr_time_taken(erase_event.get_time_taken());
 
-			event.incr_time_taken(erase_event.get_time_taken());
+				ftl->controller.stats.numFTLErase++;
+			}
 
-			ftl.controller.stats.numFTLErase++;
+			it = active_cost.get<1>().end();
+			--it;
+
+			if (current_writing_block == (*it)->physical_address)
+			 --it;
+
+			num_to_erase--;
 		}
 	}
 }
 
-Address Block_manager::get_free_block(block_type type)
+Address Block_manager::get_free_block(block_type type, Event &event)
 {
 	Address address;
-	get_page_block(address);
+	get_page_block(address, event);
 	switch (type)
 	{
 	case DATA:
-		ftl.controller.get_block_pointer(address)->set_block_type(DATA);
+		ftl->controller.get_block_pointer(address)->set_block_type(DATA);
 		data_active++;
 		break;
 	case LOG:
-		if (log_active == max_log_blocks)
+		if (log_active > max_log_blocks)
 			throw std::bad_alloc();
 
-		ftl.controller.get_block_pointer(address)->set_block_type(LOG);
+		ftl->controller.get_block_pointer(address)->set_block_type(LOG);
 		log_active++;
 		break;
 	default:
 		break;
 	}
 
-	if (FTL_IMPLEMENTATION == IMPL_DFTL || FTL_IMPLEMENTATION == IMPL_BIMODAL)
-		active_list.push_back(ftl.get_block_pointer(address));
-
 	return address;
+}
+
+void Block_manager::print_cost_status()
+{
+
+	ActiveByCost::iterator it = active_cost.get<1>().begin();
+
+	for (uint i=0;i<10;i++) //SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE
+	{
+		printf("%i %i %i\n", (*it)->physical_address, (*it)->get_pages_valid(), (*it)->get_pages_invalid());
+		++it;
+	}
+
+	printf("end:::\n");
+
+	it = active_cost.get<1>().end();
+	--it;
+
+	for (uint i=0;i<10;i++) //SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE
+	{
+		printf("%i %i %i\n", (*it)->physical_address, (*it)->get_pages_valid(), (*it)->get_pages_invalid());
+		--it;
+	}
 }
 
 void Block_manager::erase_and_invalidate(Event &event, Address &address, block_type btype)
 {
 	Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
-
-	Block *block = ftl.get_block_pointer(address);
-
-	free_list.push_back(block);
-
-	if (FTL_IMPLEMENTATION >= IMPL_DFTL)
-	{
-		std::vector<Block*>::iterator result = std::find(active_list.begin(), active_list.end(), block);
-		if (result != active_list.end())
-			active_list.erase(result);
-	}
-
-	//printf("Erasing address: %lu Block: %u\n", address.get_linear_address(), address.block);
-
 	erase_event.set_address(address);
 
-	if (ftl.controller.issue(erase_event) == FAILURE) {	assert(false);}
-	//event.consolidate_metaevent(erase_event);
-	event.incr_time_taken(erase_event.get_time_taken());
-	ftl.controller.stats.numFTLErase++;
+	if (ftl->controller.issue(erase_event) == FAILURE) { assert(false);}
+
+	free_list.push_back(ftl->get_block_pointer(address));
 
 	switch (btype)
 	{
@@ -311,6 +298,9 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 	case LOG_SEQ:
 		break;
 	}
+
+	event.incr_time_taken(erase_event.get_time_taken());
+	ftl->controller.stats.numFTLErase++;
 }
 
 int Block_manager::get_num_free_blocks()
@@ -321,52 +311,8 @@ int Block_manager::get_num_free_blocks()
 		return free_list.size();
 }
 
-void Block_manager::simulate_map_write(Event &events)
+void Block_manager::update_block(Block * b)
 {
-//	Event writeEvent = Event(WRITE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
-//	Event eraseEvent = Event(ERASE, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
-//
-//	//writeEvent.set_address(Address(map_offset + directoryCurrentPage, PAGE));
-//	writeEvent.set_address(Address(0, PAGE));
-//	writeEvent.set_noop(true);
-//
-//	if (++directoryCurrentPage % BLOCK_SIZE == 0)
-//	{
-//		if (directoryCurrentPage == max_map_pages)
-//			directoryCurrentPage = 0;
-//
-//		//Address eraseAddress = Address(map_offset + directoryCurrentPage, BLOCK);
-//		eraseEvent.set_address(Address(0, PAGE));
-//		eraseEvent.set_noop(true);
-//
-//		writeEvent.set_next(eraseEvent);
-//
-//		// Statistics
-//		ftl.controller.stats.numGCErase++;
-//	}
-//
-//	if (ftl.controller.issue(writeEvent) == FAILURE)
-//		printf("Issue Error\n");
-//
-//	printf("%f\n",writeEvent.get_time_taken());
-//	events.consolidate_metaevent(writeEvent);
-//
-//	// Statistics
-//	ftl.controller.stats.numGCWrite++;
-}
-void Block_manager::simulate_map_read(Event &events)
-{
-//	ulong inside_block = events.get_address().get_linear_address() / BLOCK_SIZE;
-//	if (!(directoryCachedPage >= inside_block && (directoryCachedPage + map_space_capacity) > inside_block))
-//	{
-//		Event readEvent = Event(READ, events.get_logical_address(), 1, events.get_start_time()+events.get_time_taken());
-//		readEvent.set_address(Address(0, PAGE));
-//		readEvent.set_noop(true);
-//
-//		ftl.controller.issue(readEvent);
-//
-//		events.consolidate_metaevent(readEvent);
-//
-//		ftl.controller.stats.numGCRead++;
-//	}
+	std::size_t pos = (b->physical_address / BLOCK_SIZE);
+	active_cost.replace(active_cost.begin()+pos, b);
 }

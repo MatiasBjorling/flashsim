@@ -81,9 +81,7 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 
 	//trans_map = new MPage[ssdSize];
 	for (uint i=0;i<ssdSize;i++)
-	{
 		trans_map.insert(MPage(i));
-	}
 
 	reverse_trans_map = new long[ssdSize];
 }
@@ -92,7 +90,7 @@ void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
 {
 	// Simulate that we goto translation map and read the mapping page.
 	Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
-	readEvent.set_address(Address(1, PAGE));
+	readEvent.set_address(Address(0, PAGE));
 	readEvent.set_noop(true);
 
 	if (controller.issue(readEvent) == FAILURE) { assert(false);}
@@ -118,20 +116,18 @@ bool FtlImpl_DftlParent::lookup_CMT(long dlpn, Event &event)
 	return true;
 }
 
-long FtlImpl_DftlParent::get_free_translation_page()
+long FtlImpl_DftlParent::get_free_data_page(Event &event)
 {
-	if (currentTranslationPage == -1 || currentTranslationPage % BLOCK_SIZE == BLOCK_SIZE -1)
-		currentTranslationPage = manager.get_free_block(LOG).get_linear_address();
-	else
-		currentTranslationPage++;
-
-	return currentTranslationPage;
+	return get_free_data_page(event, true);
 }
 
-long FtlImpl_DftlParent::get_free_data_page()
+long FtlImpl_DftlParent::get_free_data_page(Event &event, bool insert_events)
 {
+	if (currentDataPage == -1 || (currentDataPage % BLOCK_SIZE == BLOCK_SIZE -1 && insert_events))
+		Block_manager::instance()->insert_events(event);
+
 	if (currentDataPage == -1 || currentDataPage % BLOCK_SIZE == BLOCK_SIZE -1)
-		currentDataPage = manager.get_free_block(DATA).get_linear_address();
+		currentDataPage = Block_manager::instance()->get_free_block(DATA, event).get_linear_address();
 	else
 		currentDataPage++;
 
@@ -162,10 +158,6 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 			MPage current = *it;
 			current.modified_ts = event.get_start_time();
 			trans_map.replace(it, current);
-
-			// Inform the ssd model that it should invalidate the previous page.
-			Address killAddress = Address(current.ppn, PAGE);
-			event.set_replace_address(killAddress);
 		}
 	} else {
 		controller.stats.numCacheFaults++;
@@ -184,8 +176,7 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 			// Find page to evict
 			MpageByModified::iterator evictit = boost::multi_index::get<1>(trans_map).begin();
 			MPage evictPage = *++evictit;
-			//printf("Im here3: %li %li %f %f\n", evictPage.vpn, evictPage.ppn, evictPage.create_ts, evictPage.modified_ts);
-			MpageByID::iterator it = trans_map.find(evictPage.vpn);
+			MpageByID::iterator mapit = trans_map.find(evictPage.vpn);
 
 			if (evictPage.create_ts != evictPage.modified_ts)
 			{
@@ -201,7 +192,6 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 					cur.create_ts = cur.modified_ts;
 					trans_map.replace(cit, cur);
 				}
-
 
 				// Simulate the write to translate page
 				Event write_event = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
@@ -219,7 +209,7 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 			evictPage.cached = false;
 
 			reset_MPage(evictPage);
-			trans_map.replace(it, evictPage);
+			trans_map.replace(mapit, evictPage);
 		}
 
 

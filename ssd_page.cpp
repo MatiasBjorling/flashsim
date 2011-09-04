@@ -68,16 +68,9 @@ enum status Page::_read(Event &event)
 	assert(read_delay >= 0.0);
 
 	event.incr_time_taken(read_delay);
-	if (!event.get_noop())
-	{
-		//assert(state == VALID || state == EMPTY);
 
-		if (PAGE_ENABLE_DATA)
-				global_buffer = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
-
-//		if (state == EMPTY)
-//			fprintf(stderr, "Reading from empty page.\n");
-	}
+	if (!event.get_noop() && PAGE_ENABLE_DATA)
+		global_buffer = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
 
 	return SUCCESS;
 }
@@ -90,16 +83,17 @@ enum status Page::_write(Event &event)
 
 	if (PAGE_ENABLE_DATA && event.get_payload() != NULL && event.get_noop() == false)
 	{
-		assert(state == EMPTY);
 		void *data = (char*)page_data + event.get_address().get_linear_address() * PAGE_SIZE;
 		memcpy (data, event.get_payload(), PAGE_SIZE);
 	}
 
 	if (event.get_noop() == false)
+	{
+		assert(state == EMPTY);
 		state = VALID;
+	}
 
 	return SUCCESS;
-
 }
 
 const Block &Page::get_parent(void) const

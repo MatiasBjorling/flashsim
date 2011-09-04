@@ -35,6 +35,7 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/global_fun.hpp>
+#include <boost/multi_index/random_access_index.hpp>
  
 #ifndef _SSD_H
 #define _SSD_H
@@ -198,7 +199,7 @@ enum block_type {LOG, DATA, LOG_SEQ};
 enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL};
 
 
-
+#define BOOST_MULTI_INDEX_ENABLE_SAFE_MODE 1
 
 /* List classes up front for classes that have references to their "parent"
  * (e.g. a Package's parent is a Ssd).
@@ -226,15 +227,14 @@ class FtlImpl_Page;
 class FtlImpl_Bast;
 class FtlImpl_Fast;
 class FtlImpl_DftlParent;
-
 class FtlImpl_Dftl;
 class FtlImpl_BDftl;
-
-
 
 class Ram;
 class Controller;
 class Ssd;
+
+
 
 /* Class to manage physical addresses for the SSD.  It was designed to have
  * public members like a struct for quick access but also have checking,
@@ -502,12 +502,12 @@ public:
 	block_type get_block_type(void) const;
 	void set_block_type(block_type value);
 	long physical_address;
+	uint pages_invalid;
 private:
 	uint size;
 	Page * const data;
 	const Plane &parent;
 	uint pages_valid;
-	uint pages_invalid;
 	enum block_state state;
 	ulong erases_remaining;
 	double last_erase_time;
@@ -606,7 +606,7 @@ public:
 	enum status erase(Event &event);
 	enum status replace(Event &event);
 	enum status merge(Event &event);
-	const Ssd &get_parent(void);
+	const Ssd &get_parent(void) const;
 	double get_last_erase_time (const Address &address) const;
 	ulong get_erases_remaining (const Address &address) const;
 	void get_least_worn (Address &address) const;
@@ -649,29 +649,39 @@ public:
 class Block_manager
 {
 public:
-	Block_manager(FtlParent &ftl);
+	Block_manager(FtlParent *ftl);
 	~Block_manager(void);
 
 	// Usual suspects
-	Address get_free_block();
-	Address get_free_block(block_type btype);
+	Address get_free_block(Event &event);
+	Address get_free_block(block_type btype, Event &event);
 	void invalidate(Address address, block_type btype);
 	void print_statistics();
 	void insert_events(Event &event);
 	void promote_block(block_type to_type);
 	bool is_log_full();
 	void erase_and_invalidate(Event &event, Address &address, block_type btype);
-
-	// Block map directory
-	void simulate_map_write(Event &events);
-	void simulate_map_read(Event &events);
-
 	int get_num_free_blocks();
+
+	// Used to update GC on used pages in blocks.
+	void update_block(Block * b);
+
+	// Singleton
+	static Block_manager *instance();
+	static void instance_initialize(FtlParent *ftl);
+	static Block_manager *inst;
+
+	void cost_insert(Block *b);
+
+	void print_cost_status();
+
+
+
 private:
-	void get_page_block(Address &address);
+	void get_page_block(Address &address, Event &event);
 	static bool block_comparitor_simple (Block const *x,Block const *y);
 
-	FtlParent &ftl;
+	FtlParent *ftl;
 
 	ulong data_active;
 	ulong log_active;
@@ -684,9 +694,21 @@ private:
 	ulong map_space_capacity;
 
 	// Cost/Benefit priority queue.
-	std::vector<Block*> active_list;
+	typedef boost::multi_index_container<
+			Block*,
+			boost::multi_index::indexed_by<
+				boost::multi_index::random_access<>,
+				boost::multi_index::ordered_non_unique<BOOST_MULTI_INDEX_MEMBER(Block,uint,pages_invalid) >
+		  >
+		> active_set;
+
+	typedef active_set::nth_index<0>::type ActiveBySeq;
+	typedef active_set::nth_index<1>::type ActiveByCost;
+
+	active_set active_cost;
 
 	// Usual block lists
+	std::vector<Block*> active_list;
 	std::vector<Block*> free_list;
 	std::vector<Block*> invalid_list;
 
@@ -701,8 +723,13 @@ private:
 
 	// Counter for handling periodic sort of active_list
 	uint num_insert_events;
-};
 
+	uint current_writing_block;
+
+	bool inited;
+
+	bool out_of_blocks;
+};
 
 class FtlParent
 {
@@ -724,13 +751,9 @@ public:
 	enum block_state get_block_state(const Address &address) const;
 	Block *get_block_pointer(const Address & address);
 
-
-
 	Address resolve_logical_address(unsigned int logicalAddress);
-
 protected:
 	Controller &controller;
-	Block_manager manager;
 };
 
 class FtlImpl_Page : public FtlParent
@@ -743,6 +766,8 @@ public:
 	enum status trim(Event &event);
 private:
 	ulong currentPage;
+	ulong numPagesActive;
+	bool *trim_map;
 	long *map;
 };
 
@@ -853,14 +878,13 @@ protected:
 
 	bool lookup_CMT(long dlpn, Event &event);
 
-	long get_free_translation_page();
-	long get_free_data_page();
+	long get_free_data_page(Event &event);
+	long get_free_data_page(Event &event, bool insert_events);
 
 	// Mapping information
 	int addressPerPage;
 	int addressSize;
 	uint totalCMTentries;
-
 
 	// Current storage
 	long currentDataPage;
@@ -903,6 +927,7 @@ private:
 
 	Block* inuseBlock;
 	bool block_next_new();
+	long get_free_biftl_page(Event &event);
 };
 
 
@@ -943,7 +968,10 @@ public:
 	friend class FtlImpl_Dftl;
 	friend class FtlImpl_BDftl;
 	friend class Block_manager;
+
 	Stats stats;
+
+	const FtlParent &get_ftl(void) const;
 private:
 	enum status issue(Event &event_list);
 	ssd::ulong get_erases_remaining(const Address &address) const;
@@ -976,6 +1004,9 @@ public:
 	void reset_statistics();
 	void write_statistics(FILE *stream);
 	void write_header(FILE *stream);
+	const Controller &get_controller(void) const;
+
+
 private:
 	enum status read(Event &event);
 	enum status write(Event &event);

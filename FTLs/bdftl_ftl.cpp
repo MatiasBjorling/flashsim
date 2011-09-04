@@ -90,10 +90,8 @@ enum status FtlImpl_BDftl::read(Event &event)
 		MpageByID::iterator it = trans_map.find(dlpn);
 		MPage current = *it;
 
-		//if (trans_map[dlpn].ppn != -1)
 		if (current.ppn != -1)
 			event.set_address(Address(current.ppn, PAGE));
-		//event.set_address(Address(trans_map[dlpn].ppn, PAGE));
 		else
 		{
 			event.set_address(Address(0, PAGE));
@@ -125,7 +123,7 @@ enum status FtlImpl_BDftl::write(Event &event)
 
 		// Get new block if necessary
 		if (block_map[dlbn].pbn == -1u && dlpn % BLOCK_SIZE == 0)
-			block_map[dlbn].pbn = manager.get_free_block(DATA).get_linear_address();
+			block_map[dlbn].pbn = Block_manager::instance()->get_free_block(DATA, event).get_linear_address();
 
 		if (block_map[dlbn].pbn != -1u)
 		{
@@ -151,16 +149,25 @@ enum status FtlImpl_BDftl::write(Event &event)
 				uint numPages = block_map[dlbn].nextPage;
 				long startAdr = dlbn * BLOCK_SIZE;
 
+				Block *b = controller.get_block_pointer(Address(startAdr, PAGE));
+
 				for (uint i=0;i<numPages;i++)
 				{
+					assert(b->get_state(i) != INVALID);
+
+					if (b->get_state(i) != VALID)
+						continue;
+
 					MpageByID::iterator it = trans_map.find(startAdr + i);
 					MPage current = (*it);
-					update_translation_map(current, block_map[dlbn].pbn+i); //trans_map[startAdr+i].ppn = block_map[dlbn].pbn+i;
+
+					assert(current.ppn == -1);
+
+					update_translation_map(current, block_map[dlbn].pbn+i);
 					current.create_ts = event.get_start_time();
 					current.modified_ts = event.get_start_time();
 					trans_map.replace(it, current);
-//					trans_map[startAdr+i].create_ts =
-//					trans_map[startAdr+i].modified_ts = event.get_start_time();
+
 					cmt[startAdr+i] = true;
 
 					event.incr_time_taken(RAM_WRITE_DELAY);
@@ -192,50 +199,20 @@ enum status FtlImpl_BDftl::write(Event &event)
 
 	if (!handled)
 	{
+		// Important order. As get_free_data_page might change current.
+		long free_page = get_free_biftl_page(event);
+
 		MpageByID::iterator it = trans_map.find(dlpn);
 		MPage current = *it;
 
-		// Get next available data page
-		if (inuseBlock == NULL)
-		{
-			// DFTL lookup
-			resolve_mapping(event, true);
-			update_translation_map(current, get_free_data_page()); //trans_map[dlpn].ppn = get_free_data_page();
-		} else {
-			Address address;
-			if (inuseBlock->get_next_page(address) == SUCCESS)
-			{
-				update_translation_map(current, address.get_linear_address());
-				//trans_map[dlpn].ppn = address.get_linear_address();
-			} else {
+		Address a = Address(current.ppn, PAGE);
 
-					if (blockQueue.size() != 0)
-					{
-						inuseBlock = blockQueue.front();
-						blockQueue.pop();
-						if (inuseBlock->get_next_page(address) == SUCCESS)
-						{
-							update_translation_map(current, address.get_linear_address());
-							//trans_map[dlpn].ppn = address.get_linear_address();
-						}
-						else
-						{
-							printf("wee\n");
-						}
-					} else {
-						inuseBlock = NULL;
-						// DFTL lookup
-						resolve_mapping(event, true);
-						update_translation_map(current, get_free_data_page()); //trans_map[dlpn].ppn = get_free_data_page();
+		if (current.ppn != -1)
+			event.set_replace_address(a);
 
-					}
-
-
-			}
-		}
-
+		resolve_mapping(event, true);
+		update_translation_map(current, free_page);
 		trans_map.replace(it, current);
-
 
 		// Finish DFTL logic
 		event.set_address(Address(current.ppn, PAGE));
@@ -245,10 +222,50 @@ enum status FtlImpl_BDftl::write(Event &event)
 	event.incr_time_taken(RAM_READ_DELAY*3);
 	controller.stats.numFTLWrite++; // Page reads
 
-	// Insert garbage collection
-	manager.insert_events(event);
-
 	return controller.issue(event);
+}
+
+long FtlImpl_BDftl::get_free_biftl_page(Event &event)
+{
+	// Important order. As get_free_data_page might change current.
+	long free_page = -1;
+
+	// Get next available data page
+	if (inuseBlock == NULL)
+	{
+		// DFTL way
+		free_page = get_free_data_page(event);
+	} else {
+		Address address;
+		if (inuseBlock->get_next_page(address) == SUCCESS)
+		{
+			// Get page from biftl block space
+			free_page = address.get_linear_address();
+		}
+		else if (blockQueue.size() != 0)
+		{
+			inuseBlock = blockQueue.front();
+			blockQueue.pop();
+			if (inuseBlock->get_next_page(address) == SUCCESS)
+			{
+				// Get page from the next block in the biftl block space
+				free_page = address.get_linear_address();
+			}
+			else
+			{
+				assert(false);
+			}
+		} else {
+			inuseBlock = NULL;
+			// DFTL way
+			free_page = get_free_data_page(event);
+		}
+	}
+
+	assert(free_page != -1);
+
+	return free_page;
+
 }
 
 enum status FtlImpl_BDftl::trim(Event &event)
@@ -270,7 +287,7 @@ enum status FtlImpl_BDftl::trim(Event &event)
 		{
 			block_map[dlbn].pbn = -1;
 			block_map[dlbn].nextPage = 0;
-			manager.erase_and_invalidate(event, address, DATA);
+			Block_manager::instance()->erase_and_invalidate(event, address, DATA);
 		}
 	} else { // DFTL lookup
 
@@ -285,7 +302,7 @@ enum status FtlImpl_BDftl::trim(Event &event)
 			block->invalidate_page(address.page);
 
 			// Update translation map to default values.
-			update_translation_map(current, -1); // trans_map[dlpn].ppn = -1;
+			update_translation_map(current, -1);
 			current.modified_ts = -1;
 			trans_map.replace(it, current);
 
@@ -339,6 +356,7 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 	uint cnt=0;
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
+		assert(block->get_state(i) != EMPTY);
 		// When valid, two events are create, one for read and one for write. They are chained and the controller are
 		// called to execute them. The execution time is then added to the real event.
 		if (block->get_state(i) == VALID)
@@ -347,25 +365,32 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 			Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 			readEvent.set_address(Address(block->get_physical_address()+i, PAGE));
 
-			if (controller.issue(readEvent) == FAILURE) printf("Data block copy failed.");
-			//event.consolidate_metaevent(readEvent);
+			// Execute read event
+			if (controller.issue(readEvent) == FAILURE)
+				printf("Data block copy failed.");
 
-			// Setup the write event to read from the right place.
-			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
-			writeEvent.set_payload((char*)page_data + (block->get_physical_address()+i) * PAGE_SIZE);
 			// Get new address to write to and invalidate previous
-			Address dataBlockAddress = Address(get_free_data_page(), PAGE);
+			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
+			Address dataBlockAddress = Address(get_free_data_page(event, false), PAGE);
+			Block *entryBlock = controller.get_block_pointer(dataBlockAddress);
 			writeEvent.set_address(dataBlockAddress);
+
 			writeEvent.set_replace_address(Address(block->get_physical_address()+i, PAGE));
 
-			// Execute
-			if (controller.issue(writeEvent) == FAILURE) printf("Data block copy failed.");
-			//event.consolidate_metaevent(writeEvent);
+			// Setup the write event to read from the right place.
+			writeEvent.set_payload((char*)page_data + (block->get_physical_address()+i) * PAGE_SIZE);
+
+			if (controller.issue(writeEvent) == FAILURE)
+				printf("Data block copy failed.");
+
 			event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
 
 			// Update GTD
 			long dataPpn = dataBlockAddress.get_linear_address();
-			invalidated_translation[reverse_trans_map[dataPpn]] = dataPpn;
+
+			// vpn -> Old ppn to new ppn
+			//printf("%li Moving %li to %li\n", reverse_trans_map[block->get_physical_address()+i], block->get_physical_address()+i, dataPpn);
+			invalidated_translation[reverse_trans_map[block->get_physical_address()+i]] = dataPpn;
 
 			// Statistics
 			controller.stats.numFTLRead++;
@@ -379,8 +404,6 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 		}
 	}
 
-	//printf("GCed %u valid data pages.\n", cnt);
-
 	/*
 	 * Perform batch update on the marked translation pages
 	 * 1. Update GDT and CMT if necessary.
@@ -391,18 +414,18 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 
 	for (std::map<long, long>::const_iterator i = invalidated_translation.begin(); i!=invalidated_translation.end(); ++i)
 	{
-		long ppn = (*i).first;
-		long vpn = (*i).second;
+		long real_vpn = (*i).first;
+		long newppn = (*i).second;
 
 		// Update translation map ( it also updates the CMT, as it is stored inside the GDT )
-		MpageByID::iterator it = trans_map.find(vpn);
+		MpageByID::iterator it = trans_map.find(real_vpn);
 		MPage current = *it;
-		update_translation_map(current, ppn);
+		//printf("Moving2 %li %li to %li\n", current.vpn, current.ppn, newppn);
+		update_translation_map(current, newppn);
 		current.modified_ts = event.get_start_time();
 		trans_map.replace(it, current);
 
-
-		dirtied_translation_pages[vpn/addressPerPage] = true;
+		dirtied_translation_pages[real_vpn/addressPerPage] = true;
 	}
 
 	for (std::map<long, bool>::const_iterator i = dirtied_translation_pages.begin(); i!=dirtied_translation_pages.end(); ++i)

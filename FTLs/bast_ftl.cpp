@@ -133,8 +133,6 @@ enum status FtlImpl_Bast::read(Event &event)
 	if (controller.get_state(event.get_address()) == INVALID)
 		event.set_address(Address(0, PAGE));
 
-	manager.simulate_map_read(event);
-
 	// Statistics
 	controller.stats.numFTLRead++;
 
@@ -180,7 +178,7 @@ enum status FtlImpl_Bast::write(Event &event)
 		event.set_address(dataPage);
 	}
 
-	manager.insert_events(event);
+	Block_manager::instance()->insert_events(event);
 
 	// Statistics
 	controller.stats.numFTLWrite++;
@@ -213,7 +211,7 @@ enum status FtlImpl_Bast::trim(Event &event)
 		if (lBlock->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
 		{
 			dispose_logblock(logBlock, lookupBlock);
-			manager.erase_and_invalidate(event, returnAddress, LOG);
+			Block_manager::instance()->erase_and_invalidate(event, returnAddress, LOG);
 		}
 
 	}
@@ -227,7 +225,7 @@ enum status FtlImpl_Bast::trim(Event &event)
 		if (dBlock->get_state() == INACTIVE) // All pages invalid, force an erase. PTRIM style.
 		{
 			data_list[lookupBlock] = -1;
-			manager.erase_and_invalidate(event, dataAddress, DATA);
+			Block_manager::instance()->erase_and_invalidate(event, dataAddress, DATA);
 		}
 
 	}
@@ -235,8 +233,7 @@ enum status FtlImpl_Bast::trim(Event &event)
 	event.set_address(returnAddress);
 	event.set_noop(true);
 
-	manager.simulate_map_read(event);
-	manager.insert_events(event);
+	Block_manager::instance()->insert_events(event);
 
 	// Statistics
 	controller.stats.numFTLTrim++;
@@ -266,7 +263,7 @@ void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long lba, Event
 	}
 
 	logBlock = new LogPageBlock();
-	logBlock->address = manager.get_free_block(LOG);
+	logBlock->address = Block_manager::instance()->get_free_block(LOG, event);
 
 	//printf("Using new log block with address: %lu Block: %u\n", logBlock->address.get_linear_address(), logBlock->address.block);
 	log_map[lba] = logBlock;
@@ -295,19 +292,17 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long lba, Event &event)
 
 	if (isSequential)
 	{
-		manager.promote_block(DATA);
+		Block_manager::instance()->promote_block(DATA);
 
 		// Add to empty list i.e. switch without erasing the datablock.
 		if (data_list[lba] != -1)
 		{
 			Address a = Address(data_list[lba], PAGE);
-			manager.erase_and_invalidate(event, a, DATA);
+			Block_manager::instance()->erase_and_invalidate(event, a, DATA);
 		}
 
 		data_list[lba] = logBlock->address.get_linear_address();
 		dispose_logblock(logBlock, lba);
-
-		manager.simulate_map_write(event);
 
 		controller.stats.numLogMergeSwitch++;
 	}
@@ -328,7 +323,7 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	 */
 
 	Address eventAddress = Address(event.get_logical_address(), PAGE);
-	Address newDataBlock = manager.get_free_block(DATA);
+	Address newDataBlock = Block_manager::instance()->get_free_block(DATA, event);
 
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
@@ -366,19 +361,16 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 
 	// Invalidate inactive pages (LOG and DATA)
 
-	manager.erase_and_invalidate(event, logBlock->address, LOG);
+	Block_manager::instance()->erase_and_invalidate(event, logBlock->address, LOG);
 	if (data_list[lba] != -1)
 	{
 		Address a = Address(data_list[lba], PAGE);
-		manager.erase_and_invalidate(event, a, DATA);
+		Block_manager::instance()->erase_and_invalidate(event, a, DATA);
 	}
 
 
 	// Update mapping
 	data_list[lba] = newDataBlock.get_linear_address();
-
-	// Add write events if necessary.
-	manager.simulate_map_write(event);
 
 	dispose_logblock(logBlock, lba);
 

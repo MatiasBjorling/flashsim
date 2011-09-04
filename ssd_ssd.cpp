@@ -192,7 +192,7 @@ enum status Ssd::write(Event &event)
 
 enum status Ssd::replace(Event &event)
 {
-	assert(data != NULL && event.get_address().package < size);
+	assert(data != NULL && event.get_replace_address().package < size);
 	if (event.get_replace_address().valid == PAGE)
 		return data[event.get_replace_address().package].replace(event);
 	else
@@ -329,4 +329,9 @@ Block *Ssd::get_block_pointer(const Address & address)
 {
 	assert(address.valid >= PACKAGE);
 	return data[address.package].get_block_pointer(address);
+}
+
+const Controller &Ssd::get_controller(void) const
+{
+	return controller;
 }
