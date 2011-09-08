@@ -61,11 +61,17 @@ int main(int argc, char **argv){
 
 	if (FTL_IMPLEMENTATION > 2) // DFTL BIFTL
 		preIO -= 1000;
+
+	int deviceSize = 2000000;
+
 	printf("Writes %i pages for startup out of %i total pages.\n", preIO, SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE);
 
+	srand(1);
 	for (int i=0; i<preIO;i++)
 	{
-		double d = ssd.event_arrive(WRITE, i, 1, i*1000);
+		long int r = random()%deviceSize;
+		double d = ssd.event_arrive(WRITE, r, 1, i*1000);
+		//double d = ssd.event_arrive(WRITE, i, 1, i*1000);
 		afterFormatStartTime += 1000;
 
 		if (i % 1000 == 0)
@@ -100,7 +106,7 @@ int main(int argc, char **argv){
 	ssd.write_header(logFile);
 
 	double timeMultiplier = 10000;
-	int deviceSize = 2000000;
+
 
 	double read_time = 0;
 	double write_time = 0;

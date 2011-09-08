@@ -790,6 +790,8 @@ private:
 	bool is_sequential(LogPageBlock* logBlock, long lba, Event &event);
 	bool random_merge(LogPageBlock *logBlock, long lba, Event &event);
 
+	void update_map_block(Event &event);
+
 	int addressShift;
 	int addressSize;
 };
@@ -815,6 +817,8 @@ private:
 	void switch_sequential(Event &event);
 	void merge_sequential(Event &event);
 	bool random_merge(LogPageBlock *logBlock, Event &event);
+
+	void update_map_block(Event &event);
 
 	long sequential_logicalblock_address;
 	Address sequential_address;
@@ -848,7 +852,7 @@ protected:
 		MPage(long vpn);
 	};
 
-	std::map<long, bool> cmt;
+	long int cmt;
 
 	static double mpage_modified_ts_compare(const MPage& mpage);
 
@@ -856,10 +860,10 @@ protected:
 		FtlImpl_DftlParent::MPage,
 			boost::multi_index::indexed_by<
 		    // sort by MPage::operator<
-		  	  boost::multi_index::ordered_unique<boost::multi_index::member<FtlImpl_DftlParent::MPage,long int,&FtlImpl_DftlParent::MPage::vpn> >,
+    			boost::multi_index::random_access<>,
 
-		  	  // Sort by modified ts
-		  	  boost::multi_index::ordered_non_unique<boost::multi_index::global_fun<const FtlImpl_DftlParent::MPage&,double,&FtlImpl_DftlParent::mpage_modified_ts_compare> >
+    			// Sort by modified ts
+    			boost::multi_index::ordered_non_unique<boost::multi_index::global_fun<const FtlImpl_DftlParent::MPage&,double,&FtlImpl_DftlParent::mpage_modified_ts_compare> >
 		  >
 		> trans_set;
 
@@ -867,7 +871,6 @@ protected:
 	typedef trans_set::nth_index<1>::type MpageByModified;
 
 	trans_set trans_map;
-	//MPage *trans_map;
 	long *reverse_trans_map;
 
 	void consult_GTD(long dppn, Event &event);
@@ -881,6 +884,7 @@ protected:
 	long get_free_data_page(Event &event);
 	long get_free_data_page(Event &event, bool insert_events);
 
+	void evict_page_from_cache(Event &event);
 	// Mapping information
 	int addressPerPage;
 	int addressSize;

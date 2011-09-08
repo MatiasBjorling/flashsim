@@ -277,6 +277,8 @@ void FtlImpl_Fast::switch_sequential(Event &event)
 
 	data_list[sequential_logicalblock_address] = sequential_address.get_linear_address();
 
+	update_map_block(event);
+
 	controller.stats.numLogMergeSwitch++;
 }
 
@@ -310,19 +312,19 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 		readEvent.set_address(readAddress);
 		if (controller.issue(readEvent) == FAILURE) { printf("Read failed\n"); return; }
-		//event.consolidate_metaevent(readEvent);
 
 		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
 		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
 		writeEvent.set_address(Address(newDataBlock.get_linear_address() + i, PAGE));
 		if (controller.issue(writeEvent) == FAILURE) {  printf("Write failed\n"); return; }
-//		event.consolidate_metaevent(writeEvent);
 
 		event.incr_time_taken(writeEvent.get_time_taken() + readEvent.get_time_taken());
 
 		// Statistics
 		controller.stats.numFTLRead++;
 		controller.stats.numFTLWrite++;
+		controller.stats.numWLRead++;
+		controller.stats.numWLWrite++;
 	}
 
 	// Invalidate inactive pages
@@ -330,15 +332,12 @@ void FtlImpl_Fast::merge_sequential(Event &event)
 	if (data_list[sequential_logicalblock_address] != -1)
 		Block_manager::instance()->invalidate(Address(data_list[sequential_logicalblock_address], BLOCK), DATA);
 
-	//printf("Moving %lu to %lu\n", sequential_logicalblock_address, newDataBlock.get_linear_address());
-
 	// Update mapping
 	data_list[sequential_logicalblock_address] = newDataBlock.get_linear_address();
 
 	controller.stats.numLogMergeFull++;
 
-	//printf("Merged sequential\n");
-
+	update_map_block(event);
 }
 
 bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
@@ -420,6 +419,8 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 						// Statistics
 						controller.stats.numFTLRead++;
 						controller.stats.numFTLWrite++;
+						controller.stats.numWLRead++;
+						controller.stats.numWLWrite++;
 					}
 				}
 			}
@@ -455,6 +456,8 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 					// Statistics
 					controller.stats.numFTLRead++;
 					controller.stats.numFTLWrite++;
+					controller.stats.numWLRead++;
+					controller.stats.numWLWrite++;
 				}
 			}
 		}
@@ -464,12 +467,11 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 
 		data_list[victimLBA] = mergeAddress.get_linear_address();
 
-//		std::cout << "Merged random: " << m->first << "\n";
 	}
 
-//	std::cout << "Finished random.\n";
-
 	controller.stats.numLogMergeFull++;
+
+	update_map_block(event);
 
 	return true;
 }
@@ -582,4 +584,17 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 	return true;
 }
 
+void FtlImpl_Fast::update_map_block(Event &event)
+{
+	Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+	writeEvent.set_address(Address(0, PAGE));
+	writeEvent.set_noop(true);
+
+	controller.issue(writeEvent);
+
+	event.incr_time_taken(writeEvent.get_time_taken());
+
+	controller.stats.numGCWrite++;
+	controller.stats.numFTLWrite++;
+}
 

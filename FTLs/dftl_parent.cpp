@@ -47,11 +47,12 @@ FtlImpl_DftlParent::MPage::MPage(long vpn)
 	this->ppn = -1;
 	this->create_ts = -1;
 	this->modified_ts = -1;
+	this->cached = false;
 }
 
 double FtlImpl_DftlParent::mpage_modified_ts_compare(const FtlImpl_DftlParent::MPage& mpage)
 {
-	if (mpage.modified_ts == -1 || !mpage.cached)
+	if (!mpage.cached)
 		return std::numeric_limits<double>::max();
 
 	return mpage.modified_ts;
@@ -79,9 +80,9 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	// Initialise block mapping table.
 	uint ssdSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
 
-	//trans_map = new MPage[ssdSize];
+	trans_map.reserve(ssdSize);
 	for (uint i=0;i<ssdSize;i++)
-		trans_map.insert(MPage(i));
+		trans_map.push_back(MPage(i));
 
 	reverse_trans_map = new long[ssdSize];
 }
@@ -101,13 +102,13 @@ void FtlImpl_DftlParent::consult_GTD(long dlpn, Event &event)
 
 void FtlImpl_DftlParent::reset_MPage(FtlImpl_DftlParent::MPage &mpage)
 {
-	mpage.create_ts = -1;
-	mpage.modified_ts = -1;
+	mpage.create_ts = -2;
+	mpage.modified_ts = -2;
 }
 
 bool FtlImpl_DftlParent::lookup_CMT(long dlpn, Event &event)
 {
-	if (cmt.find(dlpn) == cmt.end())
+	if (!trans_map[dlpn].cached)
 		return false;
 
 	event.incr_time_taken(RAM_READ_DELAY);
@@ -148,73 +149,107 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 	 * 4. If CMT full, evict a page
 	 * 5. Add mapping to CMT
 	 */
+	//printf("%i\n", cmt);
 	if (lookup_CMT(event.get_logical_address(), event))
 	{
 		controller.stats.numCacheHits++;
 
 		if (isWrite)
 		{
-			MpageByID::iterator it = trans_map.find(dlpn);
-			MPage current = *it;
+			MPage current = trans_map[dlpn];
 			current.modified_ts = event.get_start_time();
-			trans_map.replace(it, current);
+			trans_map.replace(trans_map.begin()+dlpn, current);
 		}
+
+		evict_page_from_cache(event);
 	} else {
 		controller.stats.numCacheFaults++;
+
+		evict_page_from_cache(event);
+
 		consult_GTD(dlpn, event);
 
-		MpageByID::iterator it = trans_map.find(dlpn);
-		MPage current = *it;
+		MPage current = trans_map[dlpn];
 		current.modified_ts = event.get_start_time();
 		current.create_ts = event.get_start_time();
 		current.cached = true;
+		trans_map.replace(trans_map.begin()+dlpn, current);
 
-		cmt[dlpn] = true;
+//		MpageByModified::iterator iter = boost::multi_index::get<1>(trans_map).begin();
+//		printf("--------\n");
+//		for (int i=0;i<5;i++)
+//		{
+//			printf("@@@ %i %i %f %f %i\n", (*iter).vpn, (*iter).ppn , (*iter).create_ts, (*iter).modified_ts, (*iter).cached);
+//			++iter;
+//		}
+//
+//		MpageByModified::iterator iterE = boost::multi_index::get<1>(trans_map).end();
+//
+//		for (int i=0;i<20;i++)
+//		{
+//			--iterE;
+//			printf("$$$ %i %i %f %f %i\n", (*iterE).vpn, (*iterE).ppn , (*iterE).create_ts, (*iterE).modified_ts, (*iterE).cached);
+//
+//		}
 
-		if (cmt.size() == totalCMTentries)
+		cmt++;
+
+
+	}
+}
+
+void FtlImpl_DftlParent::evict_page_from_cache(Event &event)
+{
+	int x = 0;
+	int y = 0;
+
+	while (cmt >= totalCMTentries)
+	{
+		x++;
+		// Find page to evict
+		MpageByModified::iterator evictit = boost::multi_index::get<1>(trans_map).begin();
+		MPage evictPage = *evictit;
+
+		assert(evictPage.cached && evictPage.create_ts >= 0 && evictPage.modified_ts >= 0);
+
+		if (evictPage.create_ts != evictPage.modified_ts)
 		{
-			// Find page to evict
-			MpageByModified::iterator evictit = boost::multi_index::get<1>(trans_map).begin();
-			MPage evictPage = *++evictit;
-			MpageByID::iterator mapit = trans_map.find(evictPage.vpn);
+			// Evict page
+			// Inform the ssd model that it should invalidate the previous page.
+			// Calculate the start address of the translation page.
+			int vpnBase = evictPage.vpn - evictPage.vpn % addressPerPage;
 
-			if (evictPage.create_ts != evictPage.modified_ts)
+			for (int i=0;i<addressPerPage;i++)
 			{
-				// Evict page
-				// Inform the ssd model that it should invalidate the previous page.
-				// Calculate the start address of the translation page.
-				int vpnBase = evictPage.vpn - evictPage.vpn % addressPerPage;
-
-				for (int i=vpnBase;i<vpnBase+addressPerPage;i++)
+				MPage cur = trans_map[vpnBase+i];
+				if (cur.cached)
 				{
-					MpageByID::iterator cit = trans_map.find(i);
-					MPage cur = *cit;
 					cur.create_ts = cur.modified_ts;
-					trans_map.replace(cit, cur);
+					trans_map.replace(trans_map.begin()+vpnBase+i, cur);
 				}
-
-				// Simulate the write to translate page
-				Event write_event = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
-				write_event.set_address(Address(0, PAGE));
-				write_event.set_noop(true);
-
-				if (controller.issue(write_event) == FAILURE) {	assert(false);}
-
-				event.incr_time_taken(write_event.get_time_taken());
-				//event.consolidate_metaevent(write_event);
 			}
 
-			// Remove page from cache.
-			cmt.erase(evictPage.vpn);
-			evictPage.cached = false;
+			// Simulate the write to translate page
+			Event write_event = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+			write_event.set_address(Address(0, PAGE));
+			write_event.set_noop(true);
 
-			reset_MPage(evictPage);
-			trans_map.replace(mapit, evictPage);
+			if (controller.issue(write_event) == FAILURE) {	assert(false);}
+
+			event.incr_time_taken(write_event.get_time_taken());
+			controller.stats.numFTLWrite++;
+			controller.stats.numGCWrite++;
+			y++;
 		}
 
+		// Remove page from cache.
+		cmt--;
 
-		trans_map.replace(it, current);
+		evictPage.cached = false;
+		reset_MPage(evictPage);
+		trans_map.replace(trans_map.begin()+evictPage.vpn, evictPage);
 	}
+	//printf("%i %i %i \n", cmt,x , y);
 }
 
 void FtlImpl_DftlParent::update_translation_map(FtlImpl_DftlParent::MPage &mpage, long ppn)

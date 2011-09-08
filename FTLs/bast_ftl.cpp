@@ -79,12 +79,7 @@ FtlImpl_Bast::FtlImpl_Bast(Controller &controller):
 	addressShift = log(BLOCK_SIZE)/log(2);
 
 	// Find required number of bits for block size
-
-
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
-
-	// Trivial assumption checks
-	if (sizeof(int) != 4) assert("integer is not 4 bytes");
 
 	// Initialise block mapping table.
 	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
@@ -95,13 +90,11 @@ FtlImpl_Bast::FtlImpl_Bast(Controller &controller):
 
 	printf("Total mapping table size: %luKB\n", numBlocks * sizeof(uint) / 1024);
 	printf("Using BAST FTL.\n");
-	return;
 }
 
 FtlImpl_Bast::~FtlImpl_Bast(void)
 {
 	delete data_list;
-	return;
 }
 
 enum status FtlImpl_Bast::read(Event &event)
@@ -305,6 +298,7 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long lba, Event &event)
 		dispose_logblock(logBlock, lba);
 
 		controller.stats.numLogMergeSwitch++;
+		update_map_block(event);
 	}
 
 	return isSequential;
@@ -337,10 +331,7 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 			continue; // Empty page
 
 		if (controller.get_state(readAddress) == INVALID) // A page might be invalidated by trim
-		{
 			continue;
-		}
-
 
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 		readEvent.set_address(readAddress);
@@ -357,10 +348,11 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 		// Statistics
 		controller.stats.numFTLRead++;
 		controller.stats.numFTLWrite++;
+		controller.stats.numWLRead++;
+		controller.stats.numWLWrite++;
 	}
 
-	// Invalidate inactive pages (LOG and DATA)
-
+	// Invalidate inactive pages (LOG and DATA
 	Block_manager::instance()->erase_and_invalidate(event, logBlock->address, LOG);
 	if (data_list[lba] != -1)
 	{
@@ -371,9 +363,26 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 
 	// Update mapping
 	data_list[lba] = newDataBlock.get_linear_address();
+	update_map_block(event);
+
 
 	dispose_logblock(logBlock, lba);
 
 	controller.stats.numLogMergeFull++;
 	return true;
 }
+
+void FtlImpl_Bast::update_map_block(Event &event)
+{
+	Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+	writeEvent.set_address(Address(0, PAGE));
+	writeEvent.set_noop(true);
+
+	controller.issue(writeEvent);
+
+	event.incr_time_taken(writeEvent.get_time_taken());
+
+	controller.stats.numGCWrite++;
+	controller.stats.numFTLWrite++;
+}
+
