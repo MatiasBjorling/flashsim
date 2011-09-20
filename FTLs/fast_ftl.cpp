@@ -100,7 +100,7 @@ enum status FtlImpl_Fast::read(Event &event)
 	{
 		for (int i=0;i<currentBlock->numPages;i++)
 		{
-			event.incr_time_taken(RAM_READ_DELAY);
+			//event.incr_time_taken(RAM_READ_DELAY);
 
 			if (currentBlock->aPages[i] == event.get_logical_address())
 			{
@@ -201,8 +201,6 @@ enum status FtlImpl_Fast::trim(Event &event)
 	{
 		for (int i=0;i<currentBlock->numPages;i++)
 		{
-			event.incr_time_taken(RAM_READ_DELAY);
-
 			if (currentBlock->aPages[i] == event.get_logical_address())
 			{
 				Address address = Address(currentBlock->address.get_linear_address() + i, PAGE);

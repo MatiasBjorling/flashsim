@@ -89,6 +89,7 @@ void Block_manager::get_page_block(Address &address, Event &event)
 			out_of_blocks = true;
 			insert_events(event);
 		}
+
 		assert(free_list.size() != 0);
 		address.set_linear_address(free_list.front()->get_physical_address(), BLOCK);
 		current_writing_block = free_list.front()->get_physical_address();
@@ -174,7 +175,9 @@ void Block_manager::insert_events(Event &event)
 
 	uint num_to_erase = 5; // More Magic!
 
-	// First step and least expensive is to go though invalid list.
+	//printf("%i %i %i\n", invalid_list.size(), log_active, data_active);
+
+	// First step and least expensive is to go though invalid list. (Only used by FAST)
 	while (num_to_erase != 0 && invalid_list.size() != 0)
 	{
 		Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time());
@@ -280,6 +283,8 @@ void Block_manager::print_cost_status()
 
 void Block_manager::erase_and_invalidate(Event &event, Address &address, block_type btype)
 {
+	Block *b = ftl->get_block_pointer(address);
+
 	Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 	erase_event.set_address(address);
 

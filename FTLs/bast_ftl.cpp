@@ -151,6 +151,12 @@ enum status FtlImpl_Bast::write(Event &event)
  	uint numValid = controller.get_num_valid(&logBlock->address);
 	if (numValid < BLOCK_SIZE)
 	{
+		if (logBlock->pages[eventAddress.page] != -1)
+		{
+			Address replace_address = Address(logBlock->address.get_linear_address()+logBlock->pages[eventAddress.page], PAGE);
+			event.set_replace_address(replace_address);
+		}
+
 		logBlock->pages[eventAddress.page] = numValid;
 
 		Address logBlockAddress = logBlock->address;
@@ -163,15 +169,22 @@ enum status FtlImpl_Bast::write(Event &event)
 
 		allocate_new_logblock(logBlock, lba, event);
 		logBlock = log_map[lba];
-		//printf("Using new log block with address: %lu Block: %u\n", logBlock->address.get_linear_address(), logBlock->address.block);
 		// Write the current io to a new block.
 		logBlock->pages[eventAddress.page] = 0;
 		Address dataPage = logBlock->address;
 		dataPage.valid = PAGE;
 		event.set_address(dataPage);
+
 	}
 
-	Block_manager::instance()->insert_events(event);
+	if (data_list[lba] != -1)
+	{
+
+		int offset = event.get_logical_address() % BLOCK_SIZE;
+		Address replace = new Address(data_list[lba]+offset, PAGE);
+		if (controller.get_block_pointer(replace)->get_state(offset) != EMPTY)
+			event.set_replace_address(replace);
+	}
 
 	// Statistics
 	controller.stats.numFTLWrite++;
@@ -226,8 +239,6 @@ enum status FtlImpl_Bast::trim(Event &event)
 	event.set_address(returnAddress);
 	event.set_noop(true);
 
-	Block_manager::instance()->insert_events(event);
-
 	// Statistics
 	controller.stats.numFTLTrim++;
 
@@ -239,7 +250,6 @@ void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long lba, Event
 {
 	if (log_map.size() >= BAST_LOG_PAGE_LIMIT)
 	{
-		srandom(10);
 		int victim = random()%log_map.size()-1;
 		std::map<long, LogPageBlock*>::iterator it = log_map.begin();
 
@@ -319,16 +329,22 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	Address eventAddress = Address(event.get_logical_address(), PAGE);
 	Address newDataBlock = Block_manager::instance()->get_free_block(DATA, event);
 
+	Block *b1 = controller.get_block_pointer(logBlock->address);
+
+	int t=0;
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
 		// Lookup page table and see if page exist in log page
 		Address readAddress;
-		if (logBlock->pages[eventAddress.page] != -1 && logBlock->pages[i] != -1)
-			readAddress.set_linear_address(logBlock->address.real_address + logBlock->pages[i], PAGE);
+		if (logBlock->pages[i] != -1)
+			readAddress.set_linear_address(logBlock->address.get_linear_address() + logBlock->pages[i], PAGE);
 		else if (data_list[lba] != -1)
 			readAddress.set_linear_address(data_list[lba] + i, PAGE);
 		else
 			continue; // Empty page
+
+		if (controller.get_state(readAddress) == EMPTY)
+			continue;
 
 		if (controller.get_state(readAddress) == INVALID) // A page might be invalidated by trim
 			continue;
@@ -336,11 +352,11 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 		Event readEvent = Event(READ, event.get_logical_address(), 1, event.get_start_time());
 		readEvent.set_address(readAddress);
 		controller.issue(readEvent);
-		//event.consolidate_metaevent(readEvent);
 
 		Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
 		writeEvent.set_address(Address(newDataBlock.get_linear_address() + i, PAGE));
 		writeEvent.set_payload((char*)page_data + readAddress.get_linear_address() * PAGE_SIZE);
+		writeEvent.set_replace_address(readAddress);
 		controller.issue(writeEvent);
 
 		//event.consolidate_metaevent(writeEvent);
@@ -350,21 +366,25 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 		controller.stats.numFTLWrite++;
 		controller.stats.numWLRead++;
 		controller.stats.numWLWrite++;
+		t++;
 	}
 
+//	printf("t %i\n",t);
+
 	// Invalidate inactive pages (LOG and DATA
+
 	Block_manager::instance()->erase_and_invalidate(event, logBlock->address, LOG);
+
 	if (data_list[lba] != -1)
 	{
 		Address a = Address(data_list[lba], PAGE);
+		Block *b2 = controller.get_block_pointer(a);
 		Block_manager::instance()->erase_and_invalidate(event, a, DATA);
 	}
-
 
 	// Update mapping
 	data_list[lba] = newDataBlock.get_linear_address();
 	update_map_block(event);
-
 
 	dispose_logblock(logBlock, lba);
 

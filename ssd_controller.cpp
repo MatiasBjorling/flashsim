@@ -207,3 +207,7 @@ const FtlParent &Controller::get_ftl(void) const
 	return (*ftl);
 }
 
+void Controller::print_ftl_statistics()
+{
+	ftl->print_ftl_statistics();
+}

@@ -742,6 +742,7 @@ public:
 	virtual enum status trim(Event &event) = 0;
 	virtual void cleanup_block(Event &event, Block *block);
 
+	virtual void print_ftl_statistics();
 
 	friend class Block_manager;
 
@@ -885,6 +886,8 @@ protected:
 	long get_free_data_page(Event &event, bool insert_events);
 
 	void evict_page_from_cache(Event &event);
+	void evict_specific_page_from_cache(Event &event, long lba);
+
 	// Mapping information
 	int addressPerPage;
 	int addressSize;
@@ -932,6 +935,7 @@ private:
 	Block* inuseBlock;
 	bool block_next_new();
 	long get_free_biftl_page(Event &event);
+	void print_ftl_statistics();
 };
 
 
@@ -974,7 +978,7 @@ public:
 	friend class Block_manager;
 
 	Stats stats;
-
+	void print_ftl_statistics();
 	const FtlParent &get_ftl(void) const;
 private:
 	enum status issue(Event &event_list);
@@ -1010,6 +1014,7 @@ public:
 	void write_header(FILE *stream);
 	const Controller &get_controller(void) const;
 
+	void print_ftl_statistics();
 
 private:
 	enum status read(Event &event);

@@ -171,41 +171,20 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 
 		MPage current = trans_map[dlpn];
 		current.modified_ts = event.get_start_time();
+		if (isWrite)
+			current.modified_ts++;
 		current.create_ts = event.get_start_time();
 		current.cached = true;
 		trans_map.replace(trans_map.begin()+dlpn, current);
 
-//		MpageByModified::iterator iter = boost::multi_index::get<1>(trans_map).begin();
-//		printf("--------\n");
-//		for (int i=0;i<5;i++)
-//		{
-//			printf("@@@ %i %i %f %f %i\n", (*iter).vpn, (*iter).ppn , (*iter).create_ts, (*iter).modified_ts, (*iter).cached);
-//			++iter;
-//		}
-//
-//		MpageByModified::iterator iterE = boost::multi_index::get<1>(trans_map).end();
-//
-//		for (int i=0;i<20;i++)
-//		{
-//			--iterE;
-//			printf("$$$ %i %i %f %f %i\n", (*iterE).vpn, (*iterE).ppn , (*iterE).create_ts, (*iterE).modified_ts, (*iterE).cached);
-//
-//		}
-
 		cmt++;
-
-
 	}
 }
 
 void FtlImpl_DftlParent::evict_page_from_cache(Event &event)
 {
-	int x = 0;
-	int y = 0;
-
 	while (cmt >= totalCMTentries)
 	{
-		x++;
 		// Find page to evict
 		MpageByModified::iterator evictit = boost::multi_index::get<1>(trans_map).begin();
 		MPage evictPage = *evictit;
@@ -239,7 +218,6 @@ void FtlImpl_DftlParent::evict_page_from_cache(Event &event)
 			event.incr_time_taken(write_event.get_time_taken());
 			controller.stats.numFTLWrite++;
 			controller.stats.numGCWrite++;
-			y++;
 		}
 
 		// Remove page from cache.
@@ -249,7 +227,54 @@ void FtlImpl_DftlParent::evict_page_from_cache(Event &event)
 		reset_MPage(evictPage);
 		trans_map.replace(trans_map.begin()+evictPage.vpn, evictPage);
 	}
-	//printf("%i %i %i \n", cmt,x , y);
+}
+
+void FtlImpl_DftlParent::evict_specific_page_from_cache(Event &event, long lba)
+{
+		// Find page to evict
+		MPage evictPage = trans_map[lba];
+
+		if (!evictPage.cached)
+			return;
+
+		assert(evictPage.cached && evictPage.create_ts >= 0 && evictPage.modified_ts >= 0);
+
+		if (evictPage.create_ts != evictPage.modified_ts)
+		{
+			// Evict page
+			// Inform the ssd model that it should invalidate the previous page.
+			// Calculate the start address of the translation page.
+			int vpnBase = evictPage.vpn - evictPage.vpn % addressPerPage;
+
+			for (int i=0;i<addressPerPage;i++)
+			{
+				MPage cur = trans_map[vpnBase+i];
+				if (cur.cached)
+				{
+					cur.create_ts = cur.modified_ts;
+					trans_map.replace(trans_map.begin()+vpnBase+i, cur);
+				}
+			}
+
+			// Simulate the write to translate page
+			Event write_event = Event(WRITE, event.get_logical_address(), 1, event.get_start_time());
+			write_event.set_address(Address(0, PAGE));
+			write_event.set_noop(true);
+
+			if (controller.issue(write_event) == FAILURE) {	assert(false);}
+
+			event.incr_time_taken(write_event.get_time_taken());
+			controller.stats.numFTLWrite++;
+			controller.stats.numGCWrite++;
+		}
+
+		// Remove page from cache.
+		cmt--;
+
+		evictPage.cached = false;
+		reset_MPage(evictPage);
+		trans_map.replace(trans_map.begin()+evictPage.vpn, evictPage);
+
 }
 
 void FtlImpl_DftlParent::update_translation_map(FtlImpl_DftlParent::MPage &mpage, long ppn)

@@ -216,7 +216,7 @@ void Block::invalidate_page(uint page)
 	if (data[page].get_state() == INVALID )
 		return;
 
-	assert(data[page].get_state() == VALID);
+	//assert(data[page].get_state() == VALID);
 
 	data[page].set_state(INVALID);
 

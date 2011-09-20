@@ -65,3 +65,8 @@ void FtlParent::cleanup_block(Event &event, Block *block)
 	assert(false);
 	return;
 }
+
+void FtlParent::print_ftl_statistics()
+{
+	return;
+}

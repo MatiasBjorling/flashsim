@@ -87,9 +87,6 @@ enum status FtlImpl_BDftl::read(Event &event)
 	} else { // DFTL lookup
 		resolve_mapping(event, false);
 
-		//MpageByID::iterator it = trans_map.find(dlpn);
-		//MpageByID::iterator it = trans_map[dlpn];
-		//MPage current = *it;
 		MPage current = trans_map[dlpn];
 
 		if (current.ppn != -1)
@@ -162,18 +159,20 @@ enum status FtlImpl_BDftl::write(Event &event)
 
 					MPage current = trans_map[startAdr + i];
 
-					assert(current.ppn == -1);
+					if (current.ppn != -1)
+					{
+						update_translation_map(current, block_map[dlbn].pbn+i);
+						current.create_ts = event.get_start_time();
+						current.modified_ts = event.get_start_time();
+						current.cached = true;
+						trans_map.replace(trans_map.begin()+startAdr+i, current);
 
-					update_translation_map(current, block_map[dlbn].pbn+i);
-					current.create_ts = event.get_start_time();
-					current.modified_ts = event.get_start_time();
-					current.cached = true;
-					trans_map.replace(trans_map.begin()+startAdr+i, current);
+						cmt++;
 
-					cmt++;
+						event.incr_time_taken(RAM_WRITE_DELAY);
+						controller.stats.numMemoryWrite++;
+					}
 
-					event.incr_time_taken(RAM_WRITE_DELAY);
-					controller.stats.numMemoryWrite++;
 				}
 
 				// 4. Set block to non optimal
@@ -281,7 +280,7 @@ enum status FtlImpl_BDftl::trim(Event &event)
 	// Block-level lookup
 	if (block_map[dlbn].optimal)
 	{
-		Address address = Address(block_map[dlbn].pbn, PAGE);
+		Address address = Address(block_map[dlbn].pbn+event.get_logical_address()%BLOCK_SIZE, PAGE);
 		Block *block = controller.get_block_pointer(address);
 		block->invalidate_page(address.page);
 
@@ -293,8 +292,6 @@ enum status FtlImpl_BDftl::trim(Event &event)
 		}
 	} else { // DFTL lookup
 
-		resolve_mapping(event, false);
-
 		MPage current = trans_map[dlpn];
 		if (current.ppn != -1)
 		{
@@ -302,38 +299,35 @@ enum status FtlImpl_BDftl::trim(Event &event)
 			Block *block = controller.get_block_pointer(address);
 			block->invalidate_page(address.page);
 
+			evict_specific_page_from_cache(event, dlpn);
+
 			// Update translation map to default values.
 			update_translation_map(current, -1);
-			current.modified_ts = -1;
-			current.cached = false;
 			trans_map.replace(trans_map.begin()+dlpn, current);
-
-			// Remove it from cache too.
-			cmt--;
 
 			event.incr_time_taken(RAM_READ_DELAY);
 			event.incr_time_taken(RAM_WRITE_DELAY);
 			controller.stats.numMemoryRead++;
 			controller.stats.numMemoryWrite++;
+		}
 
-			// Update trim map and update block map if all pages are trimmed. i.e. the state are reseted to optimal.
-			long addressStart = dlpn - dlpn % BLOCK_SIZE;
-			bool allTrimmed = true;
-			for (uint i=addressStart;i<addressStart+BLOCK_SIZE;i++)
-			{
-				if (!trim_map[i])
-					allTrimmed = false;
-			}
+		// Update trim map and update block map if all pages are trimmed. i.e. the state are reseted to optimal.
+		long addressStart = dlpn - dlpn % BLOCK_SIZE;
+		bool allTrimmed = true;
+		for (uint i=addressStart;i<addressStart+BLOCK_SIZE;i++)
+		{
+			if (!trim_map[i])
+				allTrimmed = false;
+		}
 
-			controller.stats.numMemoryRead++; // Trim map looping
+		controller.stats.numMemoryRead++; // Trim map looping
 
-			if (allTrimmed)
-			{
-				block_map[dlbn].pbn = -1;
-				block_map[dlbn].nextPage = 0;
-				block_map[dlbn].optimal = true;
-				controller.stats.numMemoryWrite++; // Update block_map.
-			}
+		if (allTrimmed)
+		{
+			block_map[dlbn].pbn = -1;
+			block_map[dlbn].nextPage = 0;
+			block_map[dlbn].optimal = true;
+			controller.stats.numMemoryWrite++; // Update block_map.
 		}
 	}
 
@@ -440,5 +434,27 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 bool FtlImpl_BDftl::block_next_new()
 {
 	return (currentDataPage == -1 || currentDataPage % BLOCK_SIZE == BLOCK_SIZE -1);
+}
+
+void FtlImpl_BDftl::print_ftl_statistics()
+{
+	int size = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
+
+	printf("FTL Stats:\n");
+	printf(" Blocks total: %i\n", size);
+
+	int numOptimal = 0;
+	for (int i=0;i<size;i++)
+	{
+		BPage bp = block_map[i];
+		if (bp.optimal)
+		{
+			printf("Optimal: %i\n", i);
+			numOptimal++;
+		}
+
+	}
+
+	printf(" Blocks optimal: %i\n", numOptimal);
 }
 

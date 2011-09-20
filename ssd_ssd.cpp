@@ -320,6 +320,11 @@ void Ssd::write_statistics(FILE *stream)
 	controller.stats.write_statistics(stream);
 }
 
+void Ssd::print_ftl_statistics()
+{
+	controller.print_ftl_statistics();
+}
+
 void Ssd::write_header(FILE *stream)
 {
 	controller.stats.write_header(stream);

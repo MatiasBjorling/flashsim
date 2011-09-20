@@ -95,7 +95,7 @@ void Stats::write_statistics(FILE *stream)
 			numMemoryCache,
 			numMemoryRead,numMemoryWrite);
 
-	print_statistics();
+	//print_statistics();
 }
 
 void Stats::print_statistics()

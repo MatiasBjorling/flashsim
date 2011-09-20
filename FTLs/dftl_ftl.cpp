@@ -105,8 +105,6 @@ enum status FtlImpl_Dftl::trim(Event &event)
 {
 	uint dlpn = event.get_logical_address();
 
-	resolve_mapping(event, false);
-
 	event.set_address(Address(0, PAGE));
 
 	MPage current = trans_map[dlpn];
@@ -117,9 +115,9 @@ enum status FtlImpl_Dftl::trim(Event &event)
 		Block *block = controller.get_block_pointer(address);
 		block->invalidate_page(address.page);
 
+		evict_specific_page_from_cache(event, dlpn);
+
 		update_translation_map(current, -1);
-		current.modified_ts = -1;
-		current.create_ts = -1;
 
 		trans_map.replace(trans_map.begin()+dlpn, current);
 	}
