@@ -156,8 +156,6 @@ enum status Block::_erase(Event &event)
 		Block_manager::instance()->update_block(this);
 	}
 
-	event.incr_time_taken(erase_delay);
-
 	return SUCCESS;
 }
 

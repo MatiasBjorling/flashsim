@@ -456,5 +456,6 @@ void FtlImpl_BDftl::print_ftl_statistics()
 	}
 
 	printf(" Blocks optimal: %i\n", numOptimal);
+	Block_manager::instance()->print_statistics();
 }
 

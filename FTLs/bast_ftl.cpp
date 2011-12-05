@@ -406,3 +406,9 @@ void FtlImpl_Bast::update_map_block(Event &event)
 	controller.stats.numFTLWrite++;
 }
 
+
+void FtlImpl_Bast::print_ftl_statistics()
+{
+	Block_manager::instance()->print_statistics();
+}
+

@@ -793,6 +793,8 @@ private:
 
 	void update_map_block(Event &event);
 
+	void print_ftl_statistics();
+
 	int addressShift;
 	int addressSize;
 };
@@ -820,6 +822,8 @@ private:
 	bool random_merge(LogPageBlock *logBlock, Event &event);
 
 	void update_map_block(Event &event);
+
+	void print_ftl_statistics();
 
 	long sequential_logicalblock_address;
 	Address sequential_address;
@@ -907,6 +911,7 @@ public:
 	enum status write(Event &event);
 	enum status trim(Event &event);
 	void cleanup_block(Event &event, Block *block);
+	void print_ftl_statistics();
 };
 
 class FtlImpl_BDftl : public FtlImpl_DftlParent

@@ -70,10 +70,10 @@ int main(int argc, char **argv){
 	printf("Writes %i pages for startup out of %i total pages.\n", preIO, SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE);
 
 //	srand(1);
-//	for (int i=0; i<preIO;i++)
+//	for (int i=0; i<preIO*3;i++)
 //	{
 //		long int r = random()%deviceSize;
-//		double d = ssd.event_arrive(WRITE, i, 1, i*1000);
+//		double d = ssd.event_arrive(WRITE, r, 1, (double)i*1000.0);
 //		//double d = ssd.event_arrive(WRITE, i, 1, i*1000);
 //		afterFormatStartTime += 1000;
 //
@@ -102,6 +102,8 @@ int main(int argc, char **argv){
 	double timeMultiplier = 10000;
 
 
+	long writeEvent = 0;
+	long readEvent = 0;
 	for (int i=0; i<files.size();i++)
 	{
 		char *filename = NULL;
@@ -146,6 +148,7 @@ int main(int argc, char **argv){
 				for (int i=0;i<ioSize;i++)
 				{
 					local_loop_time += ssd.event_arrive(READ, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, ((start_time+arrive_time)*timeMultiplier)+local_loop_time);
+					readEvent++;
 				}
 
 
@@ -155,6 +158,7 @@ int main(int argc, char **argv){
 				for (int i=0;i<ioSize;i++)
 				{
 					local_loop_time += ssd.event_arrive(WRITE, ((vaddr+(i*(int)multiplier))/addressDivisor)%deviceSize, 1, ((start_time+arrive_time)*timeMultiplier)+local_loop_time);
+					writeEvent++;
 				}
 
 
@@ -165,6 +169,12 @@ int main(int argc, char **argv){
 
 		fclose(trace);
 	}
+
+	printf("Pre write done------------------------------\n");
+	ssd.print_ftl_statistics();
+	printf("Num read %li write %li\n", readEvent, writeEvent);
+	getchar();
+
 
 	FILE *logFile = NULL;
 	if ((logFile = fopen("output.log", "w")) == NULL)

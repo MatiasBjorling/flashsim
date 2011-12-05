@@ -139,7 +139,10 @@ void Block_manager::print_statistics()
 	printf("Data blocks: %lu\n", data_active);
 	printf("Free blocks: %lu\n", (max_blocks - (simpleCurrentFree/BLOCK_SIZE)) + free_list.size());
 	printf("Invalid blocks: %lu\n", invalid_list.size());
+	printf("Free2 blocks: %lu\n", (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size());
 	printf("-----------------\n");
+
+
 }
 
 void Block_manager::invalidate(Address address, block_type type)

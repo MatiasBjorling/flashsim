@@ -215,3 +215,8 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 	}
 
 }
+
+void FtlImpl_Dftl::print_ftl_statistics()
+{
+	Block_manager::instance()->print_statistics();
+}
