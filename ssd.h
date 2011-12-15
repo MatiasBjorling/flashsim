@@ -144,6 +144,11 @@ extern const uint FAST_LOG_PAGE_LIMIT;
 extern const uint CACHE_DFTL_LIMIT;
 
 /*
+ * Parallelism mode
+ */
+extern const uint PARALLELISM_MODE = 0;
+
+/*
  * Memory area to support pages with data.
  */
 extern void *page_data;
@@ -284,7 +289,7 @@ public:
 	long numGCWrite;
 	long numGCErase;
 
-	// Wearleveling
+	// Wear-leveling
 	long numWLRead;
 	long numWLWrite;
 	long numWLErase;

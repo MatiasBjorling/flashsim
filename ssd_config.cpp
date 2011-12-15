@@ -153,6 +153,14 @@ uint FAST_LOG_PAGE_LIMIT = 4;
  */
 uint CACHE_DFTL_LIMIT = 8;
 
+/*
+ * Parallelism mode.
+ * 0 -> Normal
+ * 1 -> Striping
+ * 2 -> Logical Address Space Parallelism (LASP)
+ */
+uint PARALLELISM_MODE = 0;
+
 void load_entry(char *name, double value, uint line_number) {
 	/* cheap implementation - go through all possibilities and match entry */
 	if (!strcmp(name, "RAM_READ_DELAY"))
@@ -205,6 +213,8 @@ void load_entry(char *name, double value, uint line_number) {
 		FAST_LOG_PAGE_LIMIT = value;
 	else if (!strcmp(name, "CACHE_DFTL_LIMIT"))
 		CACHE_DFTL_LIMIT = value;
+	else if (!strcmp(name, "PARALLELISM_MODE"))
+		PARALLELISM_MODE = value;
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;
@@ -270,6 +280,7 @@ void print_config(FILE *stream) {
 	fprintf(stream, "PAGE_ENABLE_DATA: %i\n", PAGE_ENABLE_DATA);
 	fprintf(stream, "MAP_DIRECTORY_SIZE: %i\n", MAP_DIRECTORY_SIZE);
 	fprintf(stream, "FTL_IMPLEMENTATION: %i\n", FTL_IMPLEMENTATION);
+	fprintf(stream, "PARALLELISM_MODE: %i\n", PARALLELISM_MODE);
 	return;
 }
 
