@@ -197,8 +197,6 @@ enum status Channel::lock(double start_time, double duration, Event &event)
  * sort table by finish times (2nd row) */
 void Channel::unlock(double start_time)
 {
-	uint i;
-
 	/* remove expired channel lock entries */
 	std::vector<lock_times>::iterator it;
 	for ( it = timings.begin(); it < timings.end(); it++)

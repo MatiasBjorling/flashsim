@@ -104,7 +104,7 @@ int main(int argc, char **argv){
 
 	long writeEvent = 0;
 	long readEvent = 0;
-	for (int i=0; i<files.size();i++)
+	for (unsigned int i=0; i<files.size();i++)
 	{
 		char *filename = NULL;
 		asprintf(&filename, "%s%s", argv[1], files[i].c_str());
@@ -192,9 +192,7 @@ int main(int argc, char **argv){
 	unsigned long num_reads = 0;
 	unsigned long num_writes = 0;
 
-	long cnt=0;
-
-	for (int i=0; i<files.size();i++)
+	for (unsigned int i=0; i<files.size();i++)
 	{
 		char *filename = NULL;
 		asprintf(&filename, "%s%s", argv[1], files[i].c_str());

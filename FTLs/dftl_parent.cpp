@@ -67,7 +67,7 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	currentTranslationPage = -1;
 
 	// Detect required number of bits for logical address size
-	addressSize = log(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE)/log(2);
+	addressSize = log(NUMBER_OF_ADDRESSABLE_BLOCKS * BLOCK_SIZE)/log(2);
 
 	// Find required number of bits for block size
 	addressPerPage = (PAGE_SIZE/ceil(addressSize / 8.0)); // 8 bits per byte
@@ -78,7 +78,7 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	printf("Number of elements in Cached Mapping Table (CMT): %i\n", totalCMTentries);
 
 	// Initialise block mapping table.
-	uint ssdSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
+	uint ssdSize = NUMBER_OF_ADDRESSABLE_BLOCKS * BLOCK_SIZE;
 
 	trans_map.reserve(ssdSize);
 	for (uint i=0;i<ssdSize;i++)

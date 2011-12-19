@@ -146,8 +146,15 @@ extern const uint CACHE_DFTL_LIMIT;
 /*
  * Parallelism mode
  */
-extern const uint PARALLELISM_MODE = 0;
+extern const uint PARALLELISM_MODE;
 
+/* Virtual block size (as a multiple of the physical block size) */
+extern const uint VIRTUAL_BLOCK_SIZE;
+
+/* Virtual page size (as a multiple of the physical page size) */
+extern const uint VIRTUAL_PAGE_SIZE;
+
+const uint NUMBER_OF_ADDRESSABLE_BLOCKS = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE / VIRTUAL_PAGE_SIZE;
 /*
  * Memory area to support pages with data.
  */
@@ -386,7 +393,7 @@ private:
 	double time_taken;
 	double bus_wait_time;
 	enum event_type type;
-	bool noop;
+
 	ulong logical_address;
 	Address address;
 	Address merge_address;
@@ -395,6 +402,7 @@ private:
 	uint size;
 	void *payload;
 	Event *next;
+	bool noop;
 };
 
 /* Single bus channel
@@ -484,6 +492,8 @@ private:
 class Block 
 {
 public:
+	long physical_address;
+	uint pages_invalid;
 	Block(const Plane &parent, uint size = BLOCK_SIZE, ulong erases_remaining = BLOCK_ERASES, double erase_delay = BLOCK_ERASE_DELAY, long physical_address = 0);
 	~Block(void);
 	enum status read(Event &event);
@@ -506,8 +516,7 @@ public:
 	Block *get_pointer(void);
 	block_type get_block_type(void) const;
 	void set_block_type(block_type value);
-	long physical_address;
-	uint pages_invalid;
+
 private:
 	uint size;
 	Page * const data;
@@ -992,6 +1001,7 @@ public:
 	const FtlParent &get_ftl(void) const;
 private:
 	enum status issue(Event &event_list);
+	void translate_address(Address &address);
 	ssd::ulong get_erases_remaining(const Address &address) const;
 	void get_least_worn(Address &address) const;
 	double get_last_erase_time(const Address &address) const;

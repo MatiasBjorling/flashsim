@@ -105,6 +105,11 @@ Ssd::Ssd(uint ssd_size):
 		}
 	}
 
+	assert(VIRTUAL_BLOCK_SIZE > 0);
+	assert(VIRTUAL_PAGE_SIZE > 0);
+
+	//NUMBER_OF_ADDRESSABLE_BLOCKS = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE / VIRTUAL_PAGE_SIZE;
+
 	return;
 }
 
@@ -137,13 +142,17 @@ double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size,
 double Ssd::event_arrive(enum event_type type, ulong logical_address, uint size, double start_time, void *buffer)
 {
 	assert(start_time >= 0.0);
-	assert((long long int) logical_address <= (long long int) SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE);
+
+	if (VIRTUAL_PAGE_SIZE == 1)
+		assert((long long int) logical_address <= (long long int) SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE);
+	else
+		assert((long long int) logical_address*VIRTUAL_PAGE_SIZE <= (long long int) SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE);
 
 	/* allocate the event and address dynamically so that the allocator can
 	 * handle efficiency issues for us */
 	Event *event = NULL;
 
-	if((event = new Event(type, logical_address, size, start_time)) == NULL)
+	if((event = new Event(type, logical_address , size, start_time)) == NULL)
 	{
 		fprintf(stderr, "Ssd error: %s: could not allocate Event\n", __func__);
 		exit(MEM_ERR);

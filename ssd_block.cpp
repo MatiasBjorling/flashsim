@@ -31,6 +31,8 @@
 using namespace ssd;
 
 Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, double erase_delay, long physical_address):
+	pages_invalid(0),
+	physical_address(physical_address),
 	size(block_size),
 
 	/* use a const pointer (Page * const data) to use as an array
@@ -38,19 +40,20 @@ Block::Block(const Plane &parent, uint block_size, ulong erases_remaining, doubl
 	data((Page *) malloc(block_size * sizeof(Page))),
 	parent(parent),
 	pages_valid(0),
-	pages_invalid(0),
+
 	state(FREE),
-	modification_time(-1),
+
 	/* set erases remaining to BLOCK_ERASES to match Block constructor args 
 	 * in Plane class
 	 * this is the cheap implementation but can change to pass through classes */
-/* 	erases_remaining(BLOCK_ERASES), */
 	erases_remaining(erases_remaining),
 
 	/* assume hardware created at time 0 and had an implied free erasure */
 	last_erase_time(0.0),
 	erase_delay(erase_delay),
-	physical_address(physical_address)
+
+	modification_time(-1)
+
 {
 	uint i;
 

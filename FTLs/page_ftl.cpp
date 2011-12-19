@@ -30,7 +30,7 @@ using namespace ssd;
 FtlImpl_Page::FtlImpl_Page(Controller &controller):
 	FtlParent(controller)
 {
-	trim_map = new bool[SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE];
+	trim_map = new bool[NUMBER_OF_ADDRESSABLE_BLOCKS * BLOCK_SIZE];
 
 	numPagesActive = 0;
 
@@ -50,7 +50,7 @@ enum status FtlImpl_Page::read(Event &event)
 
 	controller.stats.numFTLRead++;
 
-	return controller.issue(event);;
+	return controller.issue(event);
 }
 
 enum status FtlImpl_Page::write(Event &event)
@@ -60,7 +60,7 @@ enum status FtlImpl_Page::write(Event &event)
 
 	controller.stats.numFTLWrite++;
 
-	if (numPagesActive == SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE)
+	if (numPagesActive == NUMBER_OF_ADDRESSABLE_BLOCKS * BLOCK_SIZE)
 	{
 		numPagesActive -= BLOCK_SIZE;
 

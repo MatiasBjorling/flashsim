@@ -34,17 +34,16 @@ using namespace ssd;
 FtlImpl_Fast::FtlImpl_Fast(Controller &controller):
 	FtlParent(controller)
 {
-	addressSize = log(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE)/log(2);
+	addressSize = log(NUMBER_OF_ADDRESSABLE_BLOCKS)/log(2);
 	addressShift = log(BLOCK_SIZE)/log(2);
 
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
 
 	// Initialise block mapping table.
-	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
-	data_list = new long[numBlocks];
-	std::fill_n(data_list, numBlocks, -1);
+	data_list = new long[NUMBER_OF_ADDRESSABLE_BLOCKS];
+	std::fill_n(data_list, NUMBER_OF_ADDRESSABLE_BLOCKS, -1);
 
-	pin_list = new bool[numBlocks*BLOCK_SIZE];
+	pin_list = new bool[NUMBER_OF_ADDRESSABLE_BLOCKS*BLOCK_SIZE];
 
 	// SW
 	sequential_offset = 0;
@@ -54,7 +53,7 @@ FtlImpl_Fast::FtlImpl_Fast(Controller &controller):
 
 	log_pages = NULL;
 
-	printf("Total mapping table size: %luKB\n", numBlocks * sizeof(uint) / 1024);
+	printf("Total mapping table size: %luKB\n", NUMBER_OF_ADDRESSABLE_BLOCKS * sizeof(uint) / 1024);
 	printf("Using FAST FTL.\n");
 }
 
@@ -102,7 +101,7 @@ enum status FtlImpl_Fast::read(Event &event)
 		{
 			//event.incr_time_taken(RAM_READ_DELAY);
 
-			if (currentBlock->aPages[i] == event.get_logical_address())
+			if (currentBlock->aPages[i] == (long)event.get_logical_address())
 			{
 				Address readAddress = Address(currentBlock->address.get_linear_address() + i, PAGE);
 				event.set_address(readAddress);
@@ -201,7 +200,7 @@ enum status FtlImpl_Fast::trim(Event &event)
 	{
 		for (int i=0;i<currentBlock->numPages;i++)
 		{
-			if (currentBlock->aPages[i] == event.get_logical_address())
+			if (currentBlock->aPages[i] == (long)event.get_logical_address())
 			{
 				Address address = Address(currentBlock->address.get_linear_address() + i, PAGE);
 				Block *block = controller.get_block_pointer(address);

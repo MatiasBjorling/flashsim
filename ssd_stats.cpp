@@ -84,7 +84,7 @@ void Stats::write_header(FILE *stream)
 
 void Stats::write_statistics(FILE *stream)
 {
-	fprintf(stream, "%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;\n",
+	fprintf(stream, "%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;\n",
 			numFTLRead, numFTLWrite, numFTLErase, numFTLTrim,
 			numGCRead, numGCWrite, numGCErase,
 			numWLRead, numWLWrite, numWLErase,

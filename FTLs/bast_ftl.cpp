@@ -75,20 +75,19 @@ FtlImpl_Bast::FtlImpl_Bast(Controller &controller):
 {
 
 	// Detect required number of bits for logical address size
-	addressSize = log(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE)/log(2);
+	addressSize = log(NUMBER_OF_ADDRESSABLE_BLOCKS)/log(2);
 	addressShift = log(BLOCK_SIZE)/log(2);
 
 	// Find required number of bits for block size
 	printf("Total required bits for representation: %i (Address: %i Block: %i) \n", addressSize + addressShift, addressSize, addressShift);
 
 	// Initialise block mapping table.
-	uint numBlocks = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
-	data_list = new long[numBlocks];
+	data_list = new long[NUMBER_OF_ADDRESSABLE_BLOCKS];
 
-	for (uint i=0;i<numBlocks;i++)
+	for (uint i=0;i<NUMBER_OF_ADDRESSABLE_BLOCKS;i++)
 		data_list[i] = -1;
 
-	printf("Total mapping table size: %luKB\n", numBlocks * sizeof(uint) / 1024);
+	printf("Total mapping table size: %luKB\n", NUMBER_OF_ADDRESSABLE_BLOCKS * sizeof(uint) / 1024);
 	printf("Using BAST FTL.\n");
 }
 
@@ -287,7 +286,7 @@ bool FtlImpl_Bast::is_sequential(LogPageBlock* logBlock, long lba, Event &event)
 
 	// Is block switch possible? i.e. log block switch
 	bool isSequential = true;
-	for (uint i=0;i<BLOCK_SIZE;i++) if (logBlock->pages[i] != i)
+	for (uint i=0;i<BLOCK_SIZE;i++) if (logBlock->pages[i] != (int)i)
 	{
 		isSequential = false;
 		break;
@@ -328,8 +327,6 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 
 	Address eventAddress = Address(event.get_logical_address(), PAGE);
 	Address newDataBlock = Block_manager::instance()->get_free_block(DATA, event);
-
-	Block *b1 = controller.get_block_pointer(logBlock->address);
 
 	int t=0;
 	for (uint i=0;i<BLOCK_SIZE;i++)
@@ -378,7 +375,6 @@ bool FtlImpl_Bast::random_merge(LogPageBlock *logBlock, long lba, Event &event)
 	if (data_list[lba] != -1)
 	{
 		Address a = Address(data_list[lba], PAGE);
-		Block *b2 = controller.get_block_pointer(a);
 		Block_manager::instance()->erase_and_invalidate(event, a, DATA);
 	}
 

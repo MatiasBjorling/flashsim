@@ -26,7 +26,7 @@ Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 	 * requirements for map directory.
 	 */
 
-	max_blocks = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
+	max_blocks = NUMBER_OF_ADDRESSABLE_BLOCKS;
 	max_log_blocks = max_blocks;
 
 	if (FTL_IMPLEMENTATION == IMPL_FAST)
@@ -46,7 +46,7 @@ Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 
 	out_of_blocks = false;
 
-	active_cost.reserve(SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE);
+	active_cost.reserve(NUMBER_OF_ADDRESSABLE_BLOCKS);
 }
 
 Block_manager::~Block_manager(void)
@@ -139,7 +139,7 @@ void Block_manager::print_statistics()
 	printf("Data blocks: %lu\n", data_active);
 	printf("Free blocks: %lu\n", (max_blocks - (simpleCurrentFree/BLOCK_SIZE)) + free_list.size());
 	printf("Invalid blocks: %lu\n", invalid_list.size());
-	printf("Free2 blocks: %lu\n", (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size());
+	printf("Free2 blocks: %lu\n", (unsigned long int)invalid_list.size() + (unsigned long int)log_active + (unsigned long int)data_active - (unsigned long int)free_list.size());
 	printf("-----------------\n");
 
 
@@ -170,7 +170,7 @@ void Block_manager::insert_events(Event &event)
 {
 	// Calculate if GC should be activated.
 	float used = (int)invalid_list.size() + (int)log_active + (int)data_active - (int)free_list.size();
-	float total = SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE;
+	float total = NUMBER_OF_ADDRESSABLE_BLOCKS;
 	float ratio = used/total;
 
 	if (ratio < 0.90) // Magic number
@@ -268,7 +268,7 @@ void Block_manager::print_cost_status()
 
 	for (uint i=0;i<10;i++) //SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE
 	{
-		printf("%i %i %i\n", (*it)->physical_address, (*it)->get_pages_valid(), (*it)->get_pages_invalid());
+		printf("%li %i %i\n", (*it)->physical_address, (*it)->get_pages_valid(), (*it)->get_pages_invalid());
 		++it;
 	}
 
@@ -279,15 +279,13 @@ void Block_manager::print_cost_status()
 
 	for (uint i=0;i<10;i++) //SSD_SIZE*PACKAGE_SIZE*DIE_SIZE*PLANE_SIZE
 	{
-		printf("%i %i %i\n", (*it)->physical_address, (*it)->get_pages_valid(), (*it)->get_pages_invalid());
+		printf("%li %i %i\n", (*it)->physical_address, (*it)->get_pages_valid(), (*it)->get_pages_invalid());
 		--it;
 	}
 }
 
 void Block_manager::erase_and_invalidate(Event &event, Address &address, block_type btype)
 {
-	Block *b = ftl->get_block_pointer(address);
-
 	Event erase_event = Event(ERASE, event.get_logical_address(), 1, event.get_start_time()+event.get_time_taken());
 	erase_event.set_address(address);
 

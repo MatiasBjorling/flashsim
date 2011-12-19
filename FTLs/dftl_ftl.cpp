@@ -43,7 +43,7 @@ using namespace ssd;
 FtlImpl_Dftl::FtlImpl_Dftl(Controller &controller):
 	FtlImpl_DftlParent(controller)
 {
-	uint ssdSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE;
+	uint ssdSize = NUMBER_OF_ADDRESSABLE_BLOCKS * BLOCK_SIZE;
 
 	printf("Total size to map: %uKB\n", ssdSize * PAGE_SIZE / 1024);
 	printf("Using DFTL.\n");
@@ -153,7 +153,7 @@ void FtlImpl_Dftl::cleanup_block(Event &event, Block *block)
 			// Get new address to write to and invalidate previous
 			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
 			Address dataBlockAddress = Address(get_free_data_page(event, false), PAGE);
-			Block *entryBlock = controller.get_block_pointer(dataBlockAddress);
+
 			writeEvent.set_address(dataBlockAddress);
 
 			writeEvent.set_replace_address(Address(block->get_physical_address()+i, PAGE));

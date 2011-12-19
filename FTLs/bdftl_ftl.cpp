@@ -49,9 +49,8 @@ FtlImpl_BDftl::BPage::BPage()
 FtlImpl_BDftl::FtlImpl_BDftl(Controller &controller):
 	FtlImpl_DftlParent(controller)
 {
-	uint ssdBlockSize = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
-	block_map = new BPage[ssdBlockSize];
-	trim_map = new bool[ssdBlockSize*BLOCK_SIZE];
+	block_map = new BPage[NUMBER_OF_ADDRESSABLE_BLOCKS];
+	trim_map = new bool[NUMBER_OF_ADDRESSABLE_BLOCKS*BLOCK_SIZE];
 
 	inuseBlock = NULL;
 
@@ -77,7 +76,7 @@ enum status FtlImpl_BDftl::read(Event &event)
 	{
 		uint dppn = block_map[dlbn].pbn + (dlpn % BLOCK_SIZE);
 
-		if (block_map[dlbn].pbn != -1)
+		if (block_map[dlbn].pbn != (uint) -1)
 			event.set_address(Address(dppn, PAGE));
 		else
 		{
@@ -349,7 +348,6 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 	 * 2. Invalidate old pages
 	 * 3. mark their corresponding translation pages for update
 	 */
-	uint cnt=0;
 	for (uint i=0;i<BLOCK_SIZE;i++)
 	{
 		assert(block->get_state(i) != EMPTY);
@@ -368,9 +366,7 @@ void FtlImpl_BDftl::cleanup_block(Event &event, Block *block)
 			// Get new address to write to and invalidate previous
 			Event writeEvent = Event(WRITE, event.get_logical_address(), 1, event.get_start_time()+readEvent.get_time_taken());
 			Address dataBlockAddress = Address(get_free_data_page(event, false), PAGE);
-			Block *entryBlock = controller.get_block_pointer(dataBlockAddress);
 			writeEvent.set_address(dataBlockAddress);
-
 			writeEvent.set_replace_address(Address(block->get_physical_address()+i, PAGE));
 
 			// Setup the write event to read from the right place.
@@ -438,13 +434,11 @@ bool FtlImpl_BDftl::block_next_new()
 
 void FtlImpl_BDftl::print_ftl_statistics()
 {
-	int size = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE;
-
 	printf("FTL Stats:\n");
-	printf(" Blocks total: %i\n", size);
+	printf(" Blocks total: %i\n", NUMBER_OF_ADDRESSABLE_BLOCKS);
 
 	int numOptimal = 0;
-	for (int i=0;i<size;i++)
+	for (uint i=0;i<NUMBER_OF_ADDRESSABLE_BLOCKS;i++)
 	{
 		BPage bp = block_map[i];
 		if (bp.optimal)

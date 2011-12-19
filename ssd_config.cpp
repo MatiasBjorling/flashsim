@@ -161,6 +161,12 @@ uint CACHE_DFTL_LIMIT = 8;
  */
 uint PARALLELISM_MODE = 0;
 
+/* Virtual block size (as a multiple of the physical block size) */
+uint VIRTUAL_BLOCK_SIZE = 1;
+
+/* Virtual page size (as a multiple of the physical page size) */
+uint VIRTUAL_PAGE_SIZE = 1;
+
 void load_entry(char *name, double value, uint line_number) {
 	/* cheap implementation - go through all possibilities and match entry */
 	if (!strcmp(name, "RAM_READ_DELAY"))
@@ -215,6 +221,10 @@ void load_entry(char *name, double value, uint line_number) {
 		CACHE_DFTL_LIMIT = value;
 	else if (!strcmp(name, "PARALLELISM_MODE"))
 		PARALLELISM_MODE = value;
+	else if (!strcmp(name, "VIRTUAL_BLOCK_SIZE"))
+		VIRTUAL_BLOCK_SIZE = value;
+	else if (!strcmp(name, "VIRTUAL_PAGE_SIZE"))
+		VIRTUAL_PAGE_SIZE = value;
 	else
 		fprintf(stderr, "Config file parsing error on line %u\n", line_number);
 	return;
