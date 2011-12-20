@@ -13,7 +13,7 @@
 
 using namespace ssd;
 
-#define GARBAGEPATH "/home/silverwolf/workspace/randomgarbage2"
+#define GARBAGEPATH "/home/silverwolf/garbage"
 
 double do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 {
