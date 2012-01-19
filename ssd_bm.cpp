@@ -36,7 +36,6 @@ Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
 
 	directoryCurrentPage = 0;
-	simpleCurrentFree = 0;
 	num_insert_events = 0;
 
 	data_active = 0;
@@ -76,13 +75,15 @@ Block_manager *Block_manager::instance()
  */
 void Block_manager::get_page_block(Address &address, Event &event)
 {
-	if (simpleCurrentFree < max_blocks*BLOCK_SIZE)
-	{
-		address.set_linear_address(simpleCurrentFree, BLOCK);
-		current_writing_block = simpleCurrentFree;
-		simpleCurrentFree += BLOCK_SIZE;
-	}
-	else
+	// We need separate queues for each plane? communication channel? communication channel is at the per die level at the moment. i.e. each LUN is a die.
+//
+//	if (simpleCurrentFree < max_blocks*BLOCK_SIZE)
+//	{
+//		address.set_linear_address(simpleCurrentFree, BLOCK);
+//		current_writing_block = simpleCurrentFree;
+//		simpleCurrentFree += BLOCK_SIZE;
+//	}
+//	else
 	{
 		if (free_list.size() <= 1 && !out_of_blocks)
 		{
@@ -137,7 +138,7 @@ void Block_manager::print_statistics()
 	printf("-----------------\n");
 	printf("Log blocks:  %lu\n", log_active);
 	printf("Data blocks: %lu\n", data_active);
-	printf("Free blocks: %lu\n", (max_blocks - (simpleCurrentFree/BLOCK_SIZE)) + free_list.size());
+//	printf("Free blocks: %lu\n", (max_blocks - (simpleCurrentFree/BLOCK_SIZE)) + free_list.size());
 	printf("Invalid blocks: %lu\n", invalid_list.size());
 	printf("Free2 blocks: %lu\n", (unsigned long int)invalid_list.size() + (unsigned long int)log_active + (unsigned long int)data_active - (unsigned long int)free_list.size());
 	printf("-----------------\n");
@@ -202,6 +203,8 @@ void Block_manager::insert_events(Event &event)
 
 		ActiveByCost::iterator it = active_cost.get<1>().end();
 		--it;
+
+
 		while (num_to_erase != 0 && (*it)->get_pages_invalid() > 0 && (*it)->get_pages_valid() == BLOCK_SIZE)
 		{
 			if (current_writing_block != (*it)->physical_address)
@@ -311,10 +314,11 @@ void Block_manager::erase_and_invalidate(Event &event, Address &address, block_t
 
 int Block_manager::get_num_free_blocks()
 {
-	if (simpleCurrentFree < max_blocks*BLOCK_SIZE)
-		return (simpleCurrentFree / BLOCK_SIZE) + free_list.size();
-	else
-		return free_list.size();
+
+//	if (simpleCurrentFree < max_blocks*BLOCK_SIZE)
+//		return (simpleCurrentFree / BLOCK_SIZE) + free_list.size();
+//	else
+//		return free_list.size();
 }
 
 void Block_manager::update_block(Block * b)

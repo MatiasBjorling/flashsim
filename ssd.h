@@ -154,7 +154,11 @@ extern const uint VIRTUAL_BLOCK_SIZE;
 /* Virtual page size (as a multiple of the physical page size) */
 extern const uint VIRTUAL_PAGE_SIZE;
 
-const uint NUMBER_OF_ADDRESSABLE_BLOCKS = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE / VIRTUAL_PAGE_SIZE;
+extern const uint NUMBER_OF_ADDRESSABLE_BLOCKS;
+
+/* RAISSDs: Number of physical SSDs */
+extern const uint RAID_NUMBER_OF_PHYSICAL_SSDS;
+
 /*
  * Memory area to support pages with data.
  */
@@ -726,10 +730,6 @@ private:
 	std::vector<Block*> free_list;
 	std::vector<Block*> invalid_list;
 
-	// Until all pages have been requested, we serve them from a linear
-	// address space.
-	ulong simpleCurrentFree;
-
 	// Counter for returning the next free page.
 	ulong directoryCurrentPage;
 	// Address on the current cached page in SRAM.
@@ -1066,6 +1066,28 @@ private:
 	double last_erase_time;
 };
 
+class RaidSsd
+{
+public:
+	RaidSsd (uint ssd_size = SSD_SIZE);
+	~RaidSsd(void);
+	double event_arrive(enum event_type type, ulong logical_address, uint size, double start_time);
+	double event_arrive(enum event_type type, ulong logical_address, uint size, double start_time, void *buffer);
+	void *get_result_buffer();
+	friend class Controller;
+	void print_statistics();
+	void reset_statistics();
+	void write_statistics(FILE *stream);
+	void write_header(FILE *stream);
+	const Controller &get_controller(void) const;
+
+	void print_ftl_statistics();
+private:
+	uint size;
+
+	Ssd *Ssds;
+
+};
 } /* end namespace ssd */
 
 #endif

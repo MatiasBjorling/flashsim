@@ -15,15 +15,18 @@ using namespace ssd;
 
 #define GARBAGEPATH "/home/silverwolf/garbage"
 
+double timings = 0.0;
+
 double do_seq(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 {
 	unsigned int adr, i = 0;
 	double result = 0;
 	for (adr = 0; adr < file_size;adr += PAGE_SIZE)
 	{
-		double iotime = ssd->event_arrive(type, i, 1, (double) adr, (char*)test + adr);
+		double iotime = ssd->event_arrive(type, i, 1, timings, (char*)test + adr);
 		//printf("IO Execution time: %f\n", iotime);
 		result += iotime;
+		timings += iotime;
 		if (type == READ)
 		{
 			if (ssd->get_result_buffer() == NULL)
@@ -43,10 +46,13 @@ double do_seq_backward(Ssd *ssd, event_type type, void *test, unsigned int file_
 	double result = 0;
 	for (adr = file_size; adr > 0;adr -= PAGE_SIZE)
 	{
-		result += ssd->event_arrive(type, j+i, 1, file_size-(double) adr, (char*)test + adr - PAGE_SIZE);
+		double iotime = ssd->event_arrive(type, j+i, 1, timings, (char*)test + adr - PAGE_SIZE);
 
 		if (type == READ && memcmp(ssd->get_result_buffer(), (char*)test + adr - PAGE_SIZE, PAGE_SIZE) != 0)
 			fprintf(stderr, "Err. Data does not compare. i: %i\n", j+i);
+
+		result += iotime;
+		timings += iotime;
 
 		i--;
 
@@ -56,7 +62,6 @@ double do_seq_backward(Ssd *ssd, event_type type, void *test, unsigned int file_
 			j += BLOCK_SIZE;
 		}
 	}
-
 	return result;
 }
 
@@ -116,10 +121,12 @@ int main()
 
 	printf("Test 1. Write sequential test data.\n");
 	result += do_seq(ssd, WRITE, test_data, st.st_size);
+//
+//	printf("Test 1. Trim data.\n");
+//	result += do_seq(ssd, TRIM, test_data, st.st_size);
 
-	printf("Test 1. Trim data.\n");
-	result += do_seq(ssd, TRIM, test_data, st.st_size);
-
+	printf("Test 1. Write sequential test data.\n");
+		result += do_seq(ssd, WRITE, test_data, st.st_size);
 
 	printf("Test 2. Read sequential test data.\n");
 	result += do_seq(ssd, READ, test_data, st.st_size);

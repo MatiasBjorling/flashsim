@@ -31,6 +31,9 @@ Block_manager *Block_manager::inst = NULL;
 FtlParent::FtlParent(Controller &controller) : controller(controller)
 {
 	Block_manager::instance_initialize(this);
+
+	printf("Number of addressable blocks: %u\n", NUMBER_OF_ADDRESSABLE_BLOCKS);
+
 }
 
 

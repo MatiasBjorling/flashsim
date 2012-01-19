@@ -62,7 +62,7 @@ FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
 	FtlParent(controller)
 {
 	addressPerPage = 0;
-
+	cmt = 0;
 	currentDataPage = -1;
 	currentTranslationPage = -1;
 

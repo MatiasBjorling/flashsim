@@ -108,8 +108,6 @@ Ssd::Ssd(uint ssd_size):
 	assert(VIRTUAL_BLOCK_SIZE > 0);
 	assert(VIRTUAL_PAGE_SIZE > 0);
 
-	//NUMBER_OF_ADDRESSABLE_BLOCKS = SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE / VIRTUAL_PAGE_SIZE;
-
 	return;
 }
 
