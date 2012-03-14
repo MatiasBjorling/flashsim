@@ -126,3 +126,9 @@ Channel &Bus::get_channel(uint channel)
 	assert(channels != NULL && channel < num_channels);
 	return channels[channel];
 }
+
+double Bus::ready_time(uint channel)
+{
+	assert(channels != NULL && channel < num_channels);
+	return channels[channel].ready_time();
+}

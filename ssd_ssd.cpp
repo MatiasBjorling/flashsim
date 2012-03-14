@@ -34,6 +34,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <limits.h>
 
 using namespace ssd;
 
@@ -346,4 +347,25 @@ Block *Ssd::get_block_pointer(const Address & address)
 const Controller &Ssd::get_controller(void) const
 {
 	return controller;
+}
+
+/**
+ * Returns the next ready time. The ready time is the latest point in time when one of the channels are ready to serve new requests.
+ */
+double Ssd::ready_at(void)
+{
+	double next_ready_time = std::numeric_limits<double>::max();
+
+	for (int i=0;i<size;i++)
+	{
+		double ready_time = bus.get_channel(i).ready_time();
+
+		if (ready_time != -1 && ready_time < next_ready_time)
+				next_ready_time = ready_time;
+	}
+
+	if (next_ready_time == std::numeric_limits<double>::max())
+		return -1;
+	else
+		return next_ready_time;
 }

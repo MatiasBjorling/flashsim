@@ -52,10 +52,6 @@ Channel::Channel(double ctrl_delay, double data_delay, uint table_size, uint max
 
 	/* use a const pointer (double * const) for the scheduling table arrays
 	 * like a reference, we cannot reseat the pointer */
-//	lock_time(new double[table_size]),
-//	unlock_time(new double[table_size]),
-//	timings(new lock_times[table_size]),
-
 	table_entries(0),
 	selected_entry(0),
 	num_connected(0),
@@ -73,15 +69,13 @@ Channel::Channel(double ctrl_delay, double data_delay, uint table_size, uint max
 	}
 
 	timings.reserve(4096);
+
+	ready_at = -1;
 }
 
 /* free allocated bus channel state space */
 Channel::~Channel(void)
 {
-//	assert(lock_time != NULL && unlock_time != NULL);
-//	delete[] lock_time;
-//	delete[] unlock_time;
-//	delete[] timings;
 	if(num_connected > 0)
 		fprintf(stderr, "Bus channel warning: %s: %d connected devices when bus channel terminated\n", __func__, num_connected);
 	return;
@@ -185,6 +179,9 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 	lt.unlock_time = sched_time + duration;
 	timings.push_back(lt);
 
+	if (lt.unlock_time > ready_at)
+		ready_at = lt.unlock_time;
+
 	/* update event times for bus wait and time taken */
 	event.incr_bus_wait_time(sched_time - start_time);
 	event.incr_time_taken(sched_time - start_time + duration);
@@ -211,5 +208,10 @@ void Channel::unlock(double start_time)
 
 bool Channel::timings_sorter(lock_times const& lhs, lock_times const& rhs) {
     return lhs.lock_time < rhs.lock_time;
+}
+
+double Channel::ready_time(void)
+{
+	return ready_at;
 }
 

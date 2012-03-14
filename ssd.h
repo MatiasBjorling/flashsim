@@ -426,16 +426,14 @@ public:
 	enum status lock(double start_time, double duration, Event &event);
 	enum status connect(void);
 	enum status disconnect(void);
+	double ready_time(void);
 private:
 	void unlock(double current_time);
-//	uint table_size;
 
 	struct lock_times {
 		double lock_time;
 		double unlock_time;
 	};
-
-	//lock_times* const timings;
 
 	static bool timings_sorter(lock_times const& lhs, lock_times const& rhs);
 	std::vector<lock_times> timings;
@@ -446,6 +444,9 @@ private:
 	uint max_connections;
 	double ctrl_delay;
 	double data_delay;
+
+	// Stores the highest unlock_time in the vector timings list.
+	double ready_at;
 };
 
 /* Multi-channel bus comprised of Channel class objects
@@ -465,6 +466,7 @@ public:
 	enum status connect(uint channel);
 	enum status disconnect(uint channel);
 	Channel &get_channel(uint channel);
+	double ready_time(uint channel);
 private:
 	uint num_channels;
 	Channel * const channels;
@@ -734,6 +736,8 @@ private:
 	ulong directoryCurrentPage;
 	// Address on the current cached page in SRAM.
 	ulong directoryCachedPage;
+
+	ulong simpleCurrentFree;
 
 	// Counter for handling periodic sort of active_list
 	uint num_insert_events;
@@ -1035,7 +1039,7 @@ public:
 	const Controller &get_controller(void) const;
 
 	void print_ftl_statistics();
-
+	double ready_at(void);
 private:
 	enum status read(Event &event);
 	enum status write(Event &event);
