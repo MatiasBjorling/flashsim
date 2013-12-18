@@ -3,3 +3,5 @@
 /RAID
 /Page
 /Correctness
+
+*.o
