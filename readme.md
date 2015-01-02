@@ -12,12 +12,7 @@ Bibtex
     Url = {https://github.com/MatiasBjorling/flashsim},
     Year = 2011}
 
-The FTL algorihms are implemented on top of the Flash based SSD simulator implementation created by:
-
-Brendan Tauras btauras<code>at</code>gmail<code>dot</code>com
-Youngjae Kim
-Aayush Gupta
-at Pennsylvania State University.
+The FTL algorihms are implemented on top of the Flash based SSD simulator implementation created by Brendan Tauras btauras, Youngjae Kim, Aayush Gupta at Pennsylvania State University.
 
 
 
