@@ -24,3 +24,7 @@ $(foreach prog,$(PROGRAMS),$(eval $(call PROGRAM_TEMPLATE,$(prog))))
 
 clean:
 	-rm -rf *.o FTLs/*.o $(PROGRAMS)
+
+.PHONY: files
+files:
+	@echo $(SOURCES_SSDLIB) $(SOURCES_RUNS) $(HEADERS) | tr ' ' '\n'
