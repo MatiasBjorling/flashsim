@@ -9,11 +9,28 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <string.h>
+#include <stdlib.h>
+#include <string>
 
 using namespace ssd;
 
-#define GARBAGEPATH "/home/silverwolf/garbage"
+int open_temp_file(unsigned int file_size = 10 * 1024 * 1024)
+{
+	std::string out_path = "/tmp/garbage.XXXXXX";
+	int fd = mkstemp(&*out_path.begin());
+	if (fd != -1)
+	{
+		ftruncate(fd, file_size);
+		printf("Created temporary file %s of size %u\n", out_path.c_str(), file_size);
+	}
+	else
+	{
+		printf("Failed to create temp file\n");
+	}
+	return fd;
+}
 
 double timings = 0.0;
 
@@ -82,7 +99,7 @@ double do_random(Ssd *ssd, event_type type, void *test, unsigned int file_size)
 	return result;
 }
 
-int main()
+int main(int argc, char** argv)
 {
 	load_config();
 	print_config(NULL);
@@ -91,9 +108,13 @@ int main()
 	Ssd *ssd = new Ssd();
 
 	// create memory mapping of file that we are going to check with
-	int fd = open(GARBAGEPATH, O_RDONLY);
+	int fd;
+	if (argc == 1)
+		fd = open_temp_file();
+	else
+		fd = open(argv[1], O_RDONLY);
 	struct stat st;
-	stat(GARBAGEPATH, &st);
+	fstat(fd, &st);
 
 	void *test_data = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 
