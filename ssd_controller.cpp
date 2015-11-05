@@ -98,7 +98,7 @@ enum status Controller::issue(Event &event_list)
 			assert(cur -> get_address().valid > NONE);
 			if(ssd.bus.lock(cur -> get_address().package, cur -> get_start_time(), BUS_CTRL_DELAY, *cur) == FAILURE
 				|| ssd.read(*cur) == FAILURE
-				|| ssd.bus.lock(cur -> get_address().package, cur -> get_start_time(), BUS_CTRL_DELAY + BUS_DATA_DELAY, *cur) == FAILURE
+				|| ssd.bus.lock(cur -> get_address().package, cur -> get_time_taken(), BUS_CTRL_DELAY + BUS_DATA_DELAY, *cur) == FAILURE
 				|| ssd.ram.write(*cur) == FAILURE
 				|| ssd.ram.read(*cur) == FAILURE
 				|| ssd.replace(*cur) == FAILURE)
