@@ -196,12 +196,14 @@ void Channel::unlock(double start_time)
 {
 	/* remove expired channel lock entries */
 	std::vector<lock_times>::iterator it;
-	for ( it = timings.begin(); it < timings.end(); it++)
+	for ( it = timings.begin(); it < timings.end();)
 	{
 		if((*it).unlock_time <= start_time)
 			timings.erase(it);
 		else
-			break;
+		{
+			it++;
+		}
 	}
 	std::sort(timings.begin(), timings.end(), &timings_sorter);
 }
