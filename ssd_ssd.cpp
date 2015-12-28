@@ -91,7 +91,11 @@ Ssd::Ssd(uint ssd_size):
 	{
 		/* Allocate memory for data pages */
 		ulong pageSize = ((ulong)(SSD_SIZE * PACKAGE_SIZE * DIE_SIZE * PLANE_SIZE * BLOCK_SIZE)) * (ulong)PAGE_SIZE;
+#ifdef __APPLE__
+		page_data = mmap(NULL, pageSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0);
+#else
 		page_data = mmap64(NULL, pageSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1 ,0);
+#endif
 
 		if (page_data == MAP_FAILED)
 		{
