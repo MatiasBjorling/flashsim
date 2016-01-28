@@ -25,11 +25,10 @@ using namespace ssd;
 
 void debug(Ssd& ssd) throw (std::invalid_argument)
 {
-	while (std::cin)
+	char ioType;
+	ulong vaddr;
+	while (std::cin >> ioType >> vaddr)
 	{
-		char ioType;
-		ulong vaddr;
-		std::cin >> ioType >> vaddr;
 		event_type type;
 		switch (ioType)
 		{
@@ -58,11 +57,11 @@ void debug(Ssd& ssd) throw (std::invalid_argument)
 int main() throw (std::invalid_argument)
 {
 	load_config();
-	print_config(NULL);
+	print_config(stderr);
 
 	Ssd ssd;
 
-	std::cout << "INITIALIZING SSD" << std::endl;
+	std::clog << "INITIALIZING SSD" << std::endl;
 
 	debug(ssd);
 }
