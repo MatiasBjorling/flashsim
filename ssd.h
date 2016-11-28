@@ -870,6 +870,7 @@ protected:
 		long ppn;
 		double create_ts;
 		double modified_ts;
+		double last_visited_time;
 		bool cached;
 
 		MPage(long vpn);
@@ -877,7 +878,7 @@ protected:
 
 	long int cmt;
 
-	static double mpage_modified_ts_compare(const MPage& mpage);
+	static double mpage_last_visited_time_compare(const MPage& mpage);
 
 	typedef boost::multi_index_container<
 		FtlImpl_DftlParent::MPage,
@@ -885,13 +886,13 @@ protected:
 		    // sort by MPage::operator<
     			boost::multi_index::random_access<>,
 
-    			// Sort by modified ts
-    			boost::multi_index::ordered_non_unique<boost::multi_index::global_fun<const FtlImpl_DftlParent::MPage&,double,&FtlImpl_DftlParent::mpage_modified_ts_compare> >
+    			// Sort by last visited time
+    			boost::multi_index::ordered_non_unique<boost::multi_index::global_fun<const FtlImpl_DftlParent::MPage&,double,&FtlImpl_DftlParent::mpage_last_visited_time_compare> >
 		  >
 		> trans_set;
 
 	typedef trans_set::nth_index<0>::type MpageByID;
-	typedef trans_set::nth_index<1>::type MpageByModified;
+	typedef trans_set::nth_index<1>::type MpageByLastVisited;
 
 	trans_set trans_map;
 	long *reverse_trans_map;
