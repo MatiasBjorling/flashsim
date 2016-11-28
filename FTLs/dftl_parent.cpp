@@ -47,15 +47,16 @@ FtlImpl_DftlParent::MPage::MPage(long vpn)
 	this->ppn = -1;
 	this->create_ts = -1;
 	this->modified_ts = -1;
+	this->last_visited_time = -1;
 	this->cached = false;
 }
 
-double FtlImpl_DftlParent::mpage_modified_ts_compare(const FtlImpl_DftlParent::MPage& mpage)
+double FtlImpl_DftlParent::mpage_last_visited_time_compare(const FtlImpl_DftlParent::MPage& mpage)
 {
 	if (!mpage.cached)
 		return std::numeric_limits<double>::max();
 
-	return mpage.modified_ts;
+	return mpage.last_visited_time;
 }
 
 FtlImpl_DftlParent::FtlImpl_DftlParent(Controller &controller):
@@ -104,6 +105,7 @@ void FtlImpl_DftlParent::reset_MPage(FtlImpl_DftlParent::MPage &mpage)
 {
 	mpage.create_ts = -2;
 	mpage.modified_ts = -2;
+	mpage.last_visited_time = -2;
 }
 
 bool FtlImpl_DftlParent::lookup_CMT(long dlpn, Event &event)
@@ -154,14 +156,15 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 	{
 		controller.stats.numCacheHits++;
 
+		MPage current = trans_map[dlpn];
 		if (isWrite)
 		{
-			MPage current = trans_map[dlpn];
-			current.modified_ts = event.get_start_time();
-			trans_map.replace(trans_map.begin()+dlpn, current);
+			current.modified_ts = event.get_start_time();			
 		}
+		current.last_visited_time = event.get_start_time();
+		trans_map.replace(trans_map.begin()+dlpn, current);
 
-		evict_page_from_cache(event);
+		// evict_page_from_cache(event);    // no need to evict page from cache
 	} else {
 		controller.stats.numCacheFaults++;
 
@@ -171,6 +174,7 @@ void FtlImpl_DftlParent::resolve_mapping(Event &event, bool isWrite)
 
 		MPage current = trans_map[dlpn];
 		current.modified_ts = event.get_start_time();
+		current.last_visited_time = event.get_start_time();
 		if (isWrite)
 			current.modified_ts++;
 		current.create_ts = event.get_start_time();
@@ -186,7 +190,7 @@ void FtlImpl_DftlParent::evict_page_from_cache(Event &event)
 	while (cmt >= totalCMTentries)
 	{
 		// Find page to evict
-		MpageByModified::iterator evictit = boost::multi_index::get<1>(trans_map).begin();
+		MpageByLastVisited::iterator evictit = boost::multi_index::get<1>(trans_map).begin();
 		MPage evictPage = *evictit;
 
 		assert(evictPage.cached && evictPage.create_ts >= 0 && evictPage.modified_ts >= 0);
