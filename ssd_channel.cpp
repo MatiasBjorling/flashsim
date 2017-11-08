@@ -170,7 +170,7 @@ enum status Channel::lock(double start_time, double duration, Event &event)
 
 		/* schedule after all events in table */
 		if(sched_time == BUS_CHANNEL_FREE_FLAG)
-			sched_time = timings.back().unlock_time;
+			sched_time = start_time;
 	}
 
 	/* write scheduling info in free table slot */
