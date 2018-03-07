@@ -1,4 +1,5 @@
 # Extended FlashSim
+[![Build Status](https://travis-ci.org/MatiasBjorling/flashsim.svg?branch=master)](https://travis-ci.org/MatiasBjorling/flashsim)
 
 This project extends FlashSim with BAST, FAST and DFTL FTLs. 
 

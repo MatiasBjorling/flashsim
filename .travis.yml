@@ -1,0 +1,31 @@
+language: cpp
+sudo: false
+
+os:
+    - linux
+    - osx
+
+cache:
+    apt: true
+
+addons:
+    apt:
+        packages:
+        - libboost-all-dev
+
+install:
+    travis_retry make -j
+
+script:
+    - echo Testing correctness...;
+      echo -en travis_fold:start:correctness;
+      ./correctness;
+      echo -en travis_fold:end:correctness
+    - echo Testing raid...;
+      echo -en travis_fold:start:raid;
+      ./raid;
+      echo -en travis_fold:end:raid
+    - echo Testing test...;
+      echo -en travis_fold:start:test;
+      ./test;
+      echo -en travis_fold:end:test
