@@ -23,10 +23,24 @@
 
 using namespace ssd;
 
+/* Input Format
+
+   Each request consists of two or three fields, separated by whitespaces:
+   1. One character, representing the type of I/O: (R)ead, (W)rite, (T)rim;
+   2. One integer, representing the virtual address;
+   3. (Write only) One integer, representing the data written.
+
+ * Output Format
+
+   For read requests, the program responds with two integers: the data read, and
+   the physical address being read.
+ */
+
 void debug(Ssd& ssd) throw (std::invalid_argument)
 {
 	char ioType;
 	ulong vaddr;
+	char buffer[PAGE_SIZE];
 	while (std::cin >> ioType >> vaddr)
 	{
 		event_type type;
@@ -39,6 +53,7 @@ void debug(Ssd& ssd) throw (std::invalid_argument)
 			case 'W':
 			case 'w':
 				type = WRITE;
+				std::cin >> *(int*) buffer;
 				break;
 			case 'T':
 			case 't':
@@ -48,9 +63,12 @@ void debug(Ssd& ssd) throw (std::invalid_argument)
 				throw std::invalid_argument("Invalid I/O type!");
 		}
 		global_buffer = nullptr;
-		ssd.event_arrive(type, vaddr, 1, time(NULL));
+		ssd.event_arrive(type, vaddr, 1, time(NULL), buffer);
 		if (type == READ)
+		{
+			std::cout << (global_buffer ? *(int*) global_buffer : 0) << '\t';
 			std::cout << global_buffer << std::endl;
+		}
 	}
 }
 
