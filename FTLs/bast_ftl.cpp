@@ -247,7 +247,7 @@ enum status FtlImpl_Bast::trim(Event &event)
 
 void FtlImpl_Bast::allocate_new_logblock(LogPageBlock *logBlock, long lba, Event &event)
 {
-	if (log_map.size() >= BAST_LOG_PAGE_LIMIT)
+	if (log_map.size() >= BAST_LOG_BLOCK_LIMIT)
 	{
 		int victim = random()%log_map.size()-1;
 		std::map<long, LogPageBlock*>::iterator it = log_map.begin();
