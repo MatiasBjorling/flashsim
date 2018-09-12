@@ -30,7 +30,7 @@ Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 	max_log_blocks = max_blocks;
 
 	if (FTL_IMPLEMENTATION == IMPL_FAST)
-		max_log_blocks = FAST_LOG_PAGE_LIMIT;
+		max_log_blocks = FAST_LOG_BLOCK_LIMIT;
 
 	// Block-based map lookup simulation
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;

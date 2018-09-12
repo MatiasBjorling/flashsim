@@ -74,7 +74,7 @@ void FtlImpl_Fast::initialize_log_pages()
 	log_pages->address = Block_manager::instance()->get_free_block(LOG, event);
 
 	LogPageBlock *next = log_pages;
-	for (uint i=0;i<FAST_LOG_PAGE_LIMIT-1;i++)
+	for (uint i=0;i<FAST_LOG_BLOCK_LIMIT-1;i++)
 	{
 		LogPageBlock *newLPB = new LogPageBlock();
 		newLPB->address = Block_manager::instance()->get_free_block(LOG, event);
@@ -370,7 +370,7 @@ bool FtlImpl_Fast::random_merge(LogPageBlock *logBlock, Event &event)
 		if (victimLBA == -1)
 			continue;
 		// Find the last block and then the next last etc.
-		for (int logblockNr = FAST_LOG_PAGE_LIMIT; logblockNr > 0; logblockNr--)
+		for (int logblockNr = FAST_LOG_BLOCK_LIMIT; logblockNr > 0; logblockNr--)
 		{
 			LogPageBlock *lpb = log_pages;
 			for (int i = 0;i<logblockNr-1;i++)
@@ -531,7 +531,7 @@ bool FtlImpl_Fast::write_to_log_block(Event &event, long logicalBlockAddress)
 			}
 			// Update the SW log block part of the sector mapping table
 		} else {
-			if (log_page_next == FAST_LOG_PAGE_LIMIT*BLOCK_SIZE) // There are no room in the RW log lock to write data
+			if (log_page_next == FAST_LOG_BLOCK_LIMIT*BLOCK_SIZE) // There are no room in the RW log lock to write data
 			{
 				/*
 				 * Select the first block of the RW log block list as a victim
