@@ -45,6 +45,8 @@ Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 
 	out_of_blocks = false;
 
+	simpleCurrentFree = 0;
+
 	active_cost.reserve(NUMBER_OF_ADDRESSABLE_BLOCKS);
 }
 
