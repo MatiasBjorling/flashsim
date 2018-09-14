@@ -131,12 +131,12 @@ extern const uint FTL_IMPLEMENTATION;
 /*
  * LOG page limit for BAST.
  */
-extern const uint BAST_LOG_PAGE_LIMIT;
+extern const uint BAST_LOG_BLOCK_LIMIT;
 
 /*
  * LOG page limit for FAST.
  */
-extern const uint FAST_LOG_PAGE_LIMIT;
+extern const uint FAST_LOG_BLOCK_LIMIT;
 
 /*
  * Number of blocks allowed to be in DFTL Cached Mapping Table.

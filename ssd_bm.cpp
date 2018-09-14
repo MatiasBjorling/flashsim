@@ -30,7 +30,7 @@ Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 	max_log_blocks = max_blocks;
 
 	if (FTL_IMPLEMENTATION == IMPL_FAST)
-		max_log_blocks = FAST_LOG_PAGE_LIMIT;
+		max_log_blocks = FAST_LOG_BLOCK_LIMIT;
 
 	// Block-based map lookup simulation
 	max_map_pages = MAP_DIRECTORY_SIZE * BLOCK_SIZE;
@@ -44,6 +44,8 @@ Block_manager::Block_manager(FtlParent *ftl) : ftl(ftl)
 	current_writing_block = -2;
 
 	out_of_blocks = false;
+
+	simpleCurrentFree = 0;
 
 	active_cost.reserve(NUMBER_OF_ADDRESSABLE_BLOCKS);
 }

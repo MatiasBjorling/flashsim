@@ -138,13 +138,13 @@ uint FTL_IMPLEMENTATION = 0;
 /*
  * Limit of LOG pages (for use in BAST)
  */
-uint BAST_LOG_PAGE_LIMIT = 100;
+uint BAST_LOG_BLOCK_LIMIT = 100;
 
 
 /*
  * Limit of LOG pages (for use in FAST)
  */
-uint FAST_LOG_PAGE_LIMIT = 4;
+uint FAST_LOG_BLOCK_LIMIT = 4;
 
 /*
  * Number of pages allowed to be in DFTL Cached Mapping Table.
@@ -218,10 +218,10 @@ void load_entry(char *name, double value, uint line_number) {
 		MAP_DIRECTORY_SIZE = value;
 	else if (!strcmp(name, "FTL_IMPLEMENTATION"))
 		FTL_IMPLEMENTATION = value;
-	else if (!strcmp(name, "BAST_LOG_PAGE_LIMIT"))
-		BAST_LOG_PAGE_LIMIT = value;
-	else if (!strcmp(name, "FAST_LOG_PAGE_LIMIT"))
-		FAST_LOG_PAGE_LIMIT = value;
+	else if (!strcmp(name, "BAST_LOG_BLOCK_LIMIT"))
+		BAST_LOG_BLOCK_LIMIT = value;
+	else if (!strcmp(name, "FAST_LOG_BLOCK_LIMIT"))
+		FAST_LOG_BLOCK_LIMIT = value;
 	else if (!strcmp(name, "CACHE_DFTL_LIMIT"))
 		CACHE_DFTL_LIMIT = value;
 	else if (!strcmp(name, "PARALLELISM_MODE"))
